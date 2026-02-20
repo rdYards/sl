@@ -165,4 +165,44 @@ mod tests {
         fs::remove_dir_all(test_path)?;
         Ok(())
     }
+
+    #[test]
+    #[ignore]
+    fn test_persistent_ledger_creation() -> Result<(), LedgerError> {
+        let test_path = "./persistent_ledger.sl";
+        let ledger = SecureLedger::new(test_path);
+
+        // Clean up any existing test files
+        if Path::new(test_path).exists() {
+            fs::remove_dir_all(test_path)?;
+        }
+
+        // Initialize ledger
+        ledger.initialize()?;
+
+        // Add some entries to the ledger
+        let ledger_data = serde_json::json!({
+            "entries": [
+                {"id": "1", "data": "Persistent entry 1", "timestamp": chrono::Utc::now().to_rfc3339()},
+                {"id": "2", "data": "Persistent entry 2", "timestamp": chrono::Utc::now().to_rfc3339()}
+            ]
+        });
+
+        // Save unencrypted ledger temporarily
+        let ledger_path = Path::new(test_path).join("ledger.json");
+        fs::write(&ledger_path, serde_json::to_string_pretty(&ledger_data)?)?;
+
+        // Encrypt the ledger
+        ledger.encrypt_ledger("my_secure_password")?;
+        assert!(
+            Path::new(test_path).join("ledger.enc").exists(),
+            "Encrypted ledger file should exist"
+        );
+
+        // Log an event
+        ledger.log_event("Created persistent ledger for export")?;
+
+        // Do NOT clean up - this ledger is meant to be exported
+        Ok(())
+    }
 }

@@ -13,10 +13,6 @@ pub fn initialize(root_path: &str, meta: &MetaData) -> Result<(), LedgerError> {
     let meta_path = Path::new(root_path).join("meta.json");
     fs::write(meta_path, serde_json::to_string_pretty(meta)?)?;
 
-    // Create logs directory
-    let logs_path = Path::new(root_path).join("logs");
-    fs::create_dir_all(logs_path)?;
-
     // Create empty ledger.json
     let ledger_path = Path::new(root_path).join("ledger.json");
     fs::write(ledger_path, "{}")?;
