@@ -1,6 +1,0 @@
-{
-  "algorithm": "argon2",
-  "salt": "74a18cdf03598fcbd8298a11a9795574",
-  "iterations": 3,
-  "hash": "$argon2id$v=19$m=19456,t=2,p=1$dKGM3wNZj8vYKYoRqXlVdA$CLiPaMF4+coB/f3FcRVmMYAKlj7CN6x7OjJRsJfZtD0"
-}

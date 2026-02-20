@@ -1,10 +1,9 @@
-use aes_gcm::aead::generic_array::sequence::GenericSequence;
 use aes_gcm::aead::rand_core::RngCore;
 use aes_gcm::{
     Aes256Gcm, Nonce,
     aead::{Aead, KeyInit, OsRng},
 };
-use argon2::{Argon2, PasswordHash, PasswordHasher, PasswordVerifier, password_hash::SaltString};
+use argon2::{Argon2, PasswordHasher, password_hash::SaltString};
 use hex;
 use rand::random;
 use serde_json::Value;
@@ -32,6 +31,7 @@ pub fn encrypt_ledger(root_path: &str, password: &str) -> Result<(), LedgerError
 
     // Encrypt ledger file
     let ledger_path = Path::new(root_path).join("ledger.json");
+    let encrypted_path = Path::new(root_path).join("ledger.enc");
     let ledger_data = fs::read_to_string(&ledger_path)?;
 
     let binding = SaltString::encode_b64(&salt)?;
@@ -43,7 +43,8 @@ pub fn encrypt_ledger(root_path: &str, password: &str) -> Result<(), LedgerError
     let encrypted = cipher.encrypt(&nonce, ledger_data.as_bytes())?;
     let encrypted_data = format!("{}:{}", hex::encode(nonce), hex::encode(encrypted));
 
-    fs::write(ledger_path, encrypted_data)?;
+    // Save to ledger.enc instead of ledger.json
+    fs::write(encrypted_path, encrypted_data)?;
     Ok(())
 }
 
@@ -52,7 +53,7 @@ pub fn decrypt_ledger(root_path: &str, password: &str) -> Result<Value, LedgerEr
     verify_password(root_path, password)?;
 
     // Decrypt ledger
-    let ledger_path = Path::new(root_path).join("ledger.json");
+    let ledger_path = Path::new(root_path).join("ledger.enc");
     let encrypted_data = fs::read_to_string(ledger_path)?;
 
     let parts: Vec<&str> = encrypted_data.split(':').collect();

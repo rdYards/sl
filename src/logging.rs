@@ -1,20 +1,24 @@
 use std::fs;
+use std::io::Write;
 use std::path::Path;
 
 use crate::error::LedgerError;
 
 pub fn log_event(root_path: &str, event: &str) -> Result<(), LedgerError> {
-    let logs_path = Path::new(root_path).join("logs");
     let timestamp = chrono::Utc::now().to_rfc3339();
+    let log_file = Path::new(root_path).join("events.log");
 
-    let log_entry = serde_json::json!({
-        "timestamp": timestamp,
-        "event": event,
-        "user": "system"
-    });
+    // Create or append to events.log
+    let log_entry = format!("{}: {}\n", timestamp, event);
 
-    let log_file = logs_path.join(format!("{}.json", timestamp.replace(":", "-")));
-    fs::write(log_file, serde_json::to_string_pretty(&log_entry)?)?;
+    // Append to the log file
+    let mut file = fs::OpenOptions::new()
+        .create(true)
+        .write(true)
+        .append(true)
+        .open(log_file)?;
+
+    file.write_all(log_entry.as_bytes())?;
 
     Ok(())
 }

@@ -5,10 +5,9 @@ pub mod logging;
 pub mod types;
 
 use crate::error::LedgerError;
-use std::{fs, path::Path};
 use serde_json::Value;
 
-#[warn(dead_code)]
+#[allow(dead_code)]
 pub struct SecureLedger {
     root_path: String,
     meta: types::MetaData,
@@ -60,33 +59,110 @@ impl SecureLedger {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::{fs, path::Path};
 
     #[test]
-    fn it_works() -> Result<(), LedgerError> {
-        let ledger = SecureLedger::new("./my_ledger.sl");
+    fn test_initialization() -> Result<(), LedgerError> {
+        // Test setup
+        let test_path = "./my_ledger_test_init.sl";
+        let ledger = SecureLedger::new(test_path);
+
+        // Clean up any existing test files
+        if Path::new(test_path).exists() {
+            fs::remove_dir_all(test_path)?;
+        }
+
+        // Initialize and verify
+        ledger.initialize()?;
+        assert!(
+            Path::new(test_path).exists(),
+            "Ledger directory should exist after initialization"
+        );
+
+        // Clean up
+        fs::remove_dir_all(test_path)?;
+        Ok(())
+    }
+
+    #[test]
+    fn test_encryption_decryption() -> Result<(), LedgerError> {
+        let test_path = "./my_ledger_test_crypto.sl";
+        let ledger = SecureLedger::new(test_path);
+
+        // Clean up any existing test files
+        if Path::new(test_path).exists() {
+            fs::remove_dir_all(test_path)?;
+        }
+
+        // Initialize ledger
         ledger.initialize()?;
 
         // Add some entries to the ledger
         let ledger_data = serde_json::json!({
             "entries": [
-                {"id": "1", "data": "Initial entry", "timestamp": chrono::Utc::now().to_rfc3339()}
+                {"id": "1", "data": "Initial entry", "timestamp": chrono::Utc::now().to_rfc3339()},
+                {"id": "2", "data": "Second entry", "timestamp": chrono::Utc::now().to_rfc3339()}
             ]
         });
 
         // Save unencrypted ledger temporarily
-        let ledger_path = Path::new("./my_ledger.sl").join("ledger.json");
-        fs::write(ledger_path, serde_json::to_string_pretty(&ledger_data)?)?;
+        let ledger_path = Path::new(test_path).join("ledger.json");
+        fs::write(&ledger_path, serde_json::to_string_pretty(&ledger_data)?)?;
 
         // Encrypt the ledger
         ledger.encrypt_ledger("my_secure_password")?;
+        assert!(
+            Path::new(test_path).join("ledger.enc").exists(),
+            "Encrypted ledger file should exist"
+        );
 
-        // Log an event
-        ledger.log_event("Ledger initialized and encrypted")?;
-
-        // Later, to decrypt and use the ledger
+        // Decrypt and verify
         let decrypted = ledger.decrypt_ledger("my_secure_password")?;
-        println!("Decrypted ledger: {:?}", decrypted);
+        assert!(
+            decrypted.get("entries").is_some(),
+            "Decrypted data should contain entries"
+        );
+        if let Some(entries) = decrypted.get("entries").and_then(|e| e.as_array()) {
+            assert_eq!(entries.len(), 2, "Should have exactly 2 entries");
+        }
 
+        // Test wrong password handling
+        let wrong_password_result = ledger.decrypt_ledger("wrong_password");
+        assert!(
+            wrong_password_result.is_err(),
+            "Decryption with wrong password should fail"
+        );
+
+        // Clean up
+        fs::remove_dir_all(test_path)?;
+        Ok(())
+    }
+
+    #[test]
+    fn test_logging() -> Result<(), LedgerError> {
+        let test_path = "./my_ledger_test_log.sl";
+        let ledger = SecureLedger::new(test_path);
+
+        // Clean up any existing test files
+        if Path::new(test_path).exists() {
+            fs::remove_dir_all(test_path)?;
+        }
+
+        // Initialize ledger
+        ledger.initialize()?;
+
+        // Log an event and verify
+        ledger.log_event("Ledger initialized and encrypted")?;
+        let log_path = Path::new(test_path).join("events.log");
+        assert!(log_path.exists(), "Event log file should exist");
+        let log_contents = fs::read_to_string(&log_path)?;
+        assert!(
+            log_contents.contains("Ledger initialized and encrypted"),
+            "Log should contain our event message"
+        );
+
+        // Clean up
+        fs::remove_dir_all(test_path)?;
         Ok(())
     }
 }
