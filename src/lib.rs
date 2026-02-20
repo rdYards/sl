@@ -5,10 +5,10 @@ pub mod logging;
 pub mod types;
 
 use crate::error::LedgerError;
-use std::fs;
-use std::path::Path;
+use std::{fs, path::Path};
 use serde_json::Value;
 
+#[warn(dead_code)]
 pub struct SecureLedger {
     root_path: String,
     meta: types::MetaData,
@@ -67,7 +67,7 @@ mod tests {
         ledger.initialize()?;
 
         // Add some entries to the ledger
-        let mut ledger_data = serde_json::json!({
+        let ledger_data = serde_json::json!({
             "entries": [
                 {"id": "1", "data": "Initial entry", "timestamp": chrono::Utc::now().to_rfc3339()}
             ]

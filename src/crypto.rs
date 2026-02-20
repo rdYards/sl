@@ -1,4 +1,5 @@
 use aes_gcm::aead::generic_array::sequence::GenericSequence;
+use aes_gcm::aead::rand_core::RngCore;
 use aes_gcm::{
     Aes256Gcm, Nonce,
     aead::{Aead, KeyInit, OsRng},
@@ -20,7 +21,7 @@ pub fn encrypt_ledger(root_path: &str, password: &str) -> Result<(), LedgerError
     // Update hash info
     let hash_info = HashInfo {
         algorithm: "argon2".to_string(),
-        salt: hex::encode(salt),
+        salt: hex::encode(&salt),
         iterations: 3,
         hash: hash.to_string(),
     };
@@ -31,12 +32,14 @@ pub fn encrypt_ledger(root_path: &str, password: &str) -> Result<(), LedgerError
 
     // Encrypt ledger file
     let ledger_path = Path::new(root_path).join("ledger.json");
-    let ledger_data = fs::read_to_string(ledger_path)?;
+    let ledger_data = fs::read_to_string(&ledger_path)?;
 
-    let key = Argon2::default()
-        .hash_password(password.as_bytes(), &SaltString::encode_borrowed(&salt))?;
+    let binding = SaltString::encode_b64(&salt)?;
+    let key = Argon2::default().hash_password(password.as_bytes(), &binding)?;
     let cipher = Aes256Gcm::new_from_slice(key.hash.unwrap().as_bytes())?;
-    let nonce = Nonce::generate(&mut OsRng);
+    let mut nonce = [0u8; 12];
+    OsRng.fill_bytes(&mut nonce);
+    let nonce = Nonce::from_slice(&nonce);
     let encrypted = cipher.encrypt(&nonce, ledger_data.as_bytes())?;
     let encrypted_data = format!("{}:{}", hex::encode(nonce), hex::encode(encrypted));
 
@@ -57,33 +60,33 @@ pub fn decrypt_ledger(root_path: &str, password: &str) -> Result<Value, LedgerEr
         return Err("Invalid encrypted data format".into());
     }
 
-    let nonce = Nonce::from_slice(hex::decode(parts[0])?.as_slice());
+    let binding = hex::decode(parts[0])?;
+    let nonce = Nonce::from_slice(binding.as_slice());
     let ciphertext = hex::decode(parts[1])?;
 
     let hash_info = get_hash_info(root_path)?;
     let salt = hex::decode(&hash_info.salt)?;
-    let key = Argon2::default()
-        .hash_password(password.as_bytes(), &SaltString::encode_borrowed(&salt))?;
+    let binding = SaltString::encode_b64(&salt)?;
+    let key = Argon2::default().hash_password(password.as_bytes(), &binding)?;
     let cipher = Aes256Gcm::new_from_slice(key.hash.unwrap().as_bytes())?;
 
     let decrypted = cipher.decrypt(nonce, ciphertext.as_ref())?;
     Ok(serde_json::from_slice(&decrypted)?)
 }
 
-fn generate_password_hash(
-    password: &str,
-) -> Result<(Vec<u8>, argon2::password_hash::Result<PasswordHash>), LedgerError> {
+fn generate_password_hash(password: &str) -> Result<(Vec<u8>, String), LedgerError> {
     let salt = random::<[u8; 16]>();
     let argon2 = Argon2::default();
-    let hash = argon2.hash_password(password.as_bytes(), &SaltString::encode_b64(&salt)?)?;
-    Ok((salt.to_vec(), hash))
+    let binding = SaltString::encode_b64(&salt)?;
+    let hash = argon2.hash_password(password.as_bytes(), &binding)?;
+    Ok((salt.to_vec(), hash.to_string()))
 }
 
 fn verify_password(root_path: &str, password: &str) -> Result<(), LedgerError> {
     let hash_info = get_hash_info(root_path)?;
     let salt = hex::decode(&hash_info.salt)?;
-    let hash =
-        Argon2::default().hash_password(password.as_bytes(), &SaltString::encode_b64(&salt)?)?;
+    let encoded_salt = SaltString::encode_b64(&salt)?;
+    let hash = Argon2::default().hash_password(password.as_bytes(), &encoded_salt)?;
 
     if hash.to_string() != hash_info.hash {
         return Err(LedgerError::InvalidPassword("Invalid password".to_string()));
