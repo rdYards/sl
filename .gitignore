@@ -1,3 +1,3 @@
 /target
 Cargo.lock
-persistent_ledger.sl
+*.sl

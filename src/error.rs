@@ -1,6 +1,7 @@
 use aes_gcm::aes::cipher::InvalidLength;
 use hex::FromHexError;
 use thiserror::Error;
+use std::str::Utf8Error;
 
 #[derive(Error, Debug)]
 pub enum LedgerError {
@@ -20,6 +21,8 @@ pub enum LedgerError {
     Hex(#[from] FromHexError),
     #[error("Invalid AES-GCM length: {0}")]
     InvalidLength(InvalidLength),
+    #[error("UTF-8 conversion error: {0}")]
+    Utf8(std::string::FromUtf8Error),
 }
 
 impl From<argon2::password_hash::Error> for LedgerError {
@@ -43,5 +46,17 @@ impl From<InvalidLength> for LedgerError {
 impl From<&str> for LedgerError {
     fn from(s: &str) -> Self {
         LedgerError::InvalidPassword(s.to_string())
+    }
+}
+
+impl From<std::string::FromUtf8Error> for LedgerError {
+    fn from(err: std::string::FromUtf8Error) -> Self {
+        LedgerError::Utf8(err)
+    }
+}
+
+impl From<Utf8Error> for LedgerError {
+    fn from(err: Utf8Error) -> Self {
+        LedgerError::InvalidPassword(err.to_string())
     }
 }
