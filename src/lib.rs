@@ -9,160 +9,195 @@ pub use ledger::SecureLedger;
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::fs;
-    use std::path::Path;
     use crate::error::LedgerError;
+    use crate::logging::return_time;
+    use crate::types::LedgerEntry;
+    use std::{fs::File, io::Read, path::Path};
+    use tempfile::tempdir;
+    use zip::ZipArchive;
 
     #[test]
-    fn test_initialization() -> Result<(), LedgerError> {
-        let test_path = "./my_ledger_test_init.sl";
-        let ledger = SecureLedger::new(test_path);
+    fn test_intialize_ed() -> Result<(), LedgerError> {
+        let temp_dir = tempdir()?;
+        let binding = temp_dir.path().join("enc_test.sl");
+        let test_path = binding.to_str().unwrap();
+        let password = "secure_password";
 
-        // Clean up any existing test files
-        if Path::new(test_path).exists() {
-            fs::remove_dir_all(test_path)?;
-        }
+        // Create a new ledger
+        let mut ledger = SecureLedger::initialize(None, None)?;
 
-        // Initialize and verify
-        ledger.initialize("test_password")?;
-        assert!(
-            Path::new(test_path).exists(),
-            "Ledger directory should exist after initialization"
+        // Update metadata using update_meta
+        ledger.update_meta(
+            test_path,
+            "Encryption Test",
+            "Testing encryption/decryption",
         );
 
-        // Clean up
-        fs::remove_dir_all(test_path)?;
-        Ok(())
-    }
-
-    #[test]
-    fn test_encryption_decryption() -> Result<(), LedgerError> {
-        let test_path = "./my_ledger_test_crypto.sl";
-        let mut ledger = SecureLedger::new(test_path);
-
-        // Clean up any existing test files
-        if Path::new(test_path).exists() {
-            fs::remove_dir_all(test_path)?;
-        }
-
-        // Initialize ledger
-        ledger.initialize("my_secure_password")?;
-        ledger.log_event("Initialized")?;
-
-        // Add some entries to the ledger (will auto-encrypt)
-        let entry1 = types::LedgerEntry {
-            id: "1".to_string(),
-            data: "Initial entry".to_string(),
-            timestamp: chrono::Utc::now().to_rfc3339(),
+        // Add an entry
+        let entry1 = LedgerEntry {
+            id: "entry1".to_string(),
+            data: "Sensitive data 1".to_string(),
+            timestamp: return_time(),
         };
+        ledger.add_entry(entry1, password)?;
 
-        let entry2 = types::LedgerEntry {
-            id: "2".to_string(),
-            data: "Second entry".to_string(),
-            timestamp: chrono::Utc::now().to_rfc3339(),
+        // Add another entry
+        let entry2 = LedgerEntry {
+            id: "entry2".to_string(),
+            data: "Sensitive data 2".to_string(),
+            timestamp: return_time(),
         };
+        ledger.add_entry(entry2, password)?;
 
-        // The first add_entry will create the hash and encrypt
-        ledger.add_entry(entry1, "my_secure_password")?;
-        ledger.add_entry(entry2, "my_secure_password")?;
-        ledger.log_event("Entries Added")?;
+        // Remove an entry
+        ledger.remove_entry("entry1", password)?;
 
-        // Verify encrypted file exists
-        assert!(
-            Path::new(test_path).join("ledger.enc").exists(),
-            "Encrypted ledger file should exist"
-        );
+        // Verify only one entry remains
+        assert_eq!(ledger.ledger.len(), 1);
+        assert_eq!(ledger.ledger[0].id, "entry2");
 
-        // Verify NO plaintext file exists
-        assert!(
-            !Path::new(test_path).join("ledger.json").exists(),
-            "Plaintext ledger file should not exist"
-        );
-        ledger.log_event("Pushed Encrypted Data")?;
+        // Save the ledger
+        ledger.upload_to_sl(password)?;
 
-        // Load and verify
-        let mut loaded_ledger = SecureLedger::new(test_path);
-        loaded_ledger.load_ledger("my_secure_password")?;
-        assert_eq!(
-            loaded_ledger.ledger.len(),
-            2,
-            "Should have exactly 2 entries"
-        );
+        // Load it back to verify encryption/decryption worked
+        let loaded_ledger = SecureLedger::initialize(Some(test_path), Some(password))?;
+        assert_eq!(loaded_ledger.ledger.len(), 1);
+        assert_eq!(loaded_ledger.ledger[0].id, "entry2");
+        assert_eq!(loaded_ledger.ledger[0].data, "Sensitive data 2");
 
-        // Test wrong password handling
-        let wrong_password_result = loaded_ledger.load_ledger("wrong_password");
-        assert!(
-            wrong_password_result.is_err(),
-            "Decryption with wrong password should fail"
-        );
-
-        // Clean up
-        fs::remove_dir_all(test_path)?;
         Ok(())
     }
 
     #[test]
     fn test_logging() -> Result<(), LedgerError> {
-        let test_path = "./my_ledger_test_log.sl";
-        let ledger = SecureLedger::new(test_path);
+        let temp_dir = tempdir()?;
+        let binding = temp_dir.path().join("log_test.sl");
+        let test_path = binding.to_str().unwrap();
 
-        // Clean up any existing test files
-        if Path::new(test_path).exists() {
-            fs::remove_dir_all(test_path)?;
-        }
+        // Create a new ledger with write_on_change disabled to test logging
+        let mut ledger = SecureLedger::initialize(None, None)?;
+        ledger.meta.write_on_change = false;
 
-        // Initialize ledger
-        ledger.initialize("my_secure_password")?;
+        // Update metadata using update_meta
+        ledger.update_meta(test_path, "Logging Test", "Testing error logging");
 
-        // Log an event and verify
-        ledger.log_event("Ledger initialized and encrypted")?;
-        let log_path = Path::new(test_path).join("events.log");
-        assert!(log_path.exists(), "Event log file should exist");
-        let log_contents = fs::read_to_string(&log_path)?;
-        assert!(
-            log_contents.contains("Ledger initialized and encrypted"),
-            "Log should contain our event message"
-        );
+        // Get initial error log count
+        let initial_log_count = ledger.error_log.len();
 
-        // Clean up
-        fs::remove_dir_all(test_path)?;
+        // Perform operations that might generate logs
+        ledger.add_entry(
+            LedgerEntry {
+                id: "log_test1".to_string(),
+                data: "Test data".to_string(),
+                timestamp: return_time(),
+            },
+            "password",
+        )?;
+
+        // Try to remove a non-existent entry (should generate error log)
+        let result = ledger.remove_entry("non_existent", "password");
+        assert!(result.is_err());
+
+        // Save the ledger to persist logs
+        ledger.upload_to_sl("password")?;
+
+        // Load it back and verify logs were created
+        let loaded_ledger = SecureLedger::initialize(Some(test_path), Some("password"))?;
+        assert!(loaded_ledger.error_log.len() > initial_log_count);
+
         Ok(())
     }
 
     #[test]
     #[ignore]
     fn test_persistent_ledger_creation() -> Result<(), LedgerError> {
-        let test_path = "./persistent_ledger.sl";
-        let mut ledger = SecureLedger::new(test_path);
+        // Get the current working directory (root of dev environment)
+        let current_dir = std::env::current_dir()?;
+        let binding = current_dir.join("persistent_test.sl");
+        let test_path = binding.to_str().unwrap();
 
-        // Clean up any existing test files
-        if Path::new(test_path).exists() {
-            fs::remove_dir_all(test_path)?;
+        // Create a ledger with persistent storage
+        let mut ledger = SecureLedger::initialize(None, None)?;
+
+        // Update metadata using update_meta
+        ledger.update_meta(test_path, "Persistent Test", "This ledger should persist");
+
+        // Add some entries
+        for i in 0..3 {
+            ledger.add_entry(
+                LedgerEntry {
+                    id: format!("persistent_{}", i),
+                    data: format!("Persistent data {}", i),
+                    timestamp: return_time(),
+                },
+                "persistent_password",
+            )?;
         }
 
-        // Initialize ledger
-        ledger.initialize("my_secure_password")?;
+        // Save the ledger
+        ledger.upload_to_sl("persistent_password")?;
 
-        // Add some entries to the ledger
-        let entry1 = types::LedgerEntry {
-            id: "1".to_string(),
-            data: "Persistent entry 1".to_string(),
-            timestamp: chrono::Utc::now().to_rfc3339(),
-        };
+        // Verify the file exists (for manual inspection)
+        assert!(Path::new(test_path).exists());
 
-        let entry2 = types::LedgerEntry {
-            id: "2".to_string(),
-            data: "Persistent entry 2".to_string(),
-            timestamp: chrono::Utc::now().to_rfc3339(),
-        };
+        Ok(())
+    }
 
-        ledger.add_entry(entry1, "my_secure_password")?;
-        ledger.add_entry(entry2, "my_secure_password")?;
+    #[test]
+    fn test_archive_structure() -> Result<(), LedgerError> {
+        let temp_dir = tempdir()?;
+        let binding = temp_dir.path().join("structure_test.sl");
+        let test_path = binding.to_str().unwrap();
+        let password = "structure_test_pw";
 
-        // Log an event
-        ledger.log_event("Created persistent ledger for export")?;
+        // Create a test ledger
+        let mut ledger = SecureLedger::initialize(None, None)?;
 
-        // Do NOT clean up - this ledger is meant to be exported
+        // Update metadata using update_meta
+        ledger.update_meta(test_path, "Structure Test", "Testing archive structure");
+
+        // Add an entry to generate some content
+        ledger.add_entry(
+            LedgerEntry {
+                id: "structure_test_entry".to_string(),
+                data: "Test data for structure".to_string(),
+                timestamp: return_time(),
+            },
+            password,
+        )?;
+
+        // Save the ledger
+        ledger.upload_to_sl(password)?;
+
+        // Open the zip archive to verify structure
+        let file = File::open(test_path)?;
+        let mut archive = ZipArchive::new(file)?;
+
+        // Verify all required files exist
+        assert!(archive.by_name("hash.json").is_ok());
+        assert!(archive.by_name("meta.json").is_ok());
+        assert!(archive.by_name("ledger.enc").is_ok());
+        assert!(archive.by_name("event.log").is_ok());
+
+        // Verify the files have content
+        let mut hash_content = String::new();
+        archive
+            .by_name("hash.json")?
+            .read_to_string(&mut hash_content)?;
+        assert!(!hash_content.is_empty());
+
+        let mut meta_content = String::new();
+        archive
+            .by_name("meta.json")?
+            .read_to_string(&mut meta_content)?;
+        assert!(!meta_content.is_empty());
+
+        let mut ledger_content = Vec::new();
+        archive
+            .by_name("ledger.enc")?
+            .read_to_end(&mut ledger_content)?;
+        assert!(!ledger_content.is_empty());
+
         Ok(())
     }
 }

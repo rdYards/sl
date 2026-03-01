@@ -1,29 +1,23 @@
-use std::fs;
-use std::io::Write;
-use std::path::Path;
+use std::{
+    time::{SystemTime, UNIX_EPOCH},
+};
 
-use crate::error::LedgerError;
+pub fn return_time() -> String {
+    let start = SystemTime::now();
+    let since_the_epoch = start
+        .duration_since(UNIX_EPOCH)
+        .expect("Time went backwards");
 
-pub fn log_event(root_path: &str, event: &str) -> Result<(), LedgerError> {
-    let timestamp = chrono::Utc::now().to_rfc3339();
-    let log_file = Path::new(root_path).join("events.log");
+    let seconds = since_the_epoch.as_secs();
+    let nanos = since_the_epoch.subsec_nanos();
 
-    // Create or append to events.log
-    let log_entry = format!("{}: {}\n", timestamp, event);
+    // Convert seconds to hours, minutes, seconds
+    let hours = (seconds % 86400) / 3600;
+    let minutes = (seconds % 3600) / 60;
+    let seconds = seconds % 60;
 
-    // Append to the log file
-    let mut file = fs::OpenOptions::new()
-        .create(true)
-        .write(true)
-        .append(true)
-        .open(log_file)?;
-
-    file.write_all(log_entry.as_bytes())?;
-
-    Ok(())
-}
-
-pub fn log_error(root_path: &str, error: &str) -> Result<(), LedgerError> {
-    log_event(root_path, &format!("ERROR: {}", error))?;
-    Ok(())
+    format!(
+        "{:02}:{:02}:{:02}.{:09} UTC",
+        hours, minutes, seconds, nanos
+    )
 }

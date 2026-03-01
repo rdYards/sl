@@ -1,113 +1,102 @@
-use aes_gcm::aead::rand_core::RngCore;
 use aes_gcm::{
-    Aes256Gcm, Nonce,
+    AeadCore, Aes256Gcm, Nonce,
     aead::{Aead, KeyInit, OsRng},
 };
 use argon2::{Argon2, PasswordHasher, password_hash::SaltString};
 use hex;
 use rand::random;
-use serde_json::Value;
+use serde::{Deserialize, Serialize};
 use std::fs;
 use std::path::Path;
 
 use crate::error::LedgerError;
-use crate::types::HashInfo;
+use crate::types::{HashInfo, LedgerEntry};
 
-pub fn encrypt_ledger(root_path: &str, password: &str) -> Result<(), LedgerError> {
-    // Generate and store password hash
-    let (salt, hash) = generate_password_hash(password)?;
+// Structure to hold encrypted ledger data
+#[derive(Serialize, Deserialize)]
+pub struct EncryptedLedger {
+    nonce: String,
+    ciphertext: String,
+    salt: String,
+    hash: String,
+}
 
-    // Update hash info
-    let hash_info = HashInfo {
-        algorithm: "argon2".to_string(),
-        salt: hex::encode(&salt),
-        iterations: 3,
+// Encrypts the ledger data and saves it to disk
+pub fn encrypt_ledger(
+    root_path: &str,
+    ledger: &[LedgerEntry],
+    password: &str,
+) -> Result<EncryptedLedger, LedgerError> {
+    // Generate a random 256-bit key from the password
+    let salt = random::<[u8; 16]>();
+    let argon2 = Argon2::default();
+    let binding = SaltString::encode_b64(&salt)?;
+    let hash = argon2.hash_password(password.as_bytes(), &binding)?;
+
+    // Use the hash as the encryption key (first 32 bytes)
+    let binding = hash.hash.unwrap();
+    let key = &binding.as_bytes()[..32];
+    let cipher = Aes256Gcm::new_from_slice(key)?;
+
+    // Serialize the ledger to JSON
+    let ledger_json = serde_json::to_string(ledger)?;
+
+    // Generate a random nonce
+    let nonce = Aes256Gcm::generate_nonce(&mut OsRng);
+
+    // Encrypt the ledger data
+    let ciphertext = cipher.encrypt(&nonce, ledger_json.as_bytes())?;
+
+    // Create the encrypted ledger structure
+    let encrypted_ledger = EncryptedLedger {
+        nonce: hex::encode(nonce),
+        ciphertext: hex::encode(ciphertext),
+        salt: hex::encode(salt),
         hash: hash.to_string(),
     };
 
-    // Save hash info
-    let hash_path = Path::new(root_path).join("hash.json");
-    fs::write(hash_path, serde_json::to_string_pretty(&hash_info)?)?;
-
-    // Encrypt the ledger data
-    let ledger_path = Path::new(root_path).join("ledger.json");
-    let ledger_data = fs::read_to_string(ledger_path)?;
+    // Save to disk
     let encrypted_path = Path::new(root_path).join("ledger.enc");
-    encrypt_data(&encrypted_path, &ledger_data, password)?;
+    fs::write(encrypted_path, serde_json::to_string(&encrypted_ledger)?)?;
 
-    Ok(())
+    Ok(encrypted_ledger)
 }
 
-pub fn decrypt_ledger(root_path: &str, password: &str) -> Result<Value, LedgerError> {
-    verify_password(root_path, password)?; // Verify password
+// Decrypts the ledger data from disk
+pub fn decrypt_ledger(
+    encrypted_data: &[u8],
+    password: &str,
+) -> Result<Vec<LedgerEntry>, LedgerError> {
+    // Parse the encrypted ledger
+    let encrypted_ledger: EncryptedLedger = serde_json::from_slice(encrypted_data)?;
 
-    // Get the encrypted ledger path
-    let ledger_path = Path::new(root_path).join("ledger.enc");
+    // Decode the salt and hash it with the password
+    let salt = hex::decode(&encrypted_ledger.salt)?;
+    let encoded_salt = SaltString::encode_b64(&salt)?;
+    let hash = Argon2::default().hash_password(password.as_bytes(), &encoded_salt)?;
 
-    // Read and decrypt the data
-    let decrypted = decrypt_data(&ledger_path, password)?;
-
-    // Parse the decrypted JSON
-    Ok(serde_json::from_str(&decrypted)?)
-}
-
-pub fn encrypt_data(path: &Path, data: &str, password: &str) -> Result<(), LedgerError> {
-    // Generate and store password hash if not exists
-    let hash_path = path.parent().unwrap().join("hash.json");
-    if !hash_path.exists() {
-        let (salt, hash) = generate_password_hash(password)?;
-        let hash_info = HashInfo {
-            algorithm: "argon2".to_string(),
-            salt: hex::encode(&salt),
-            iterations: 3,
-            hash: hash.to_string(),
-        };
-        fs::write(&hash_path, serde_json::to_string_pretty(&hash_info)?)?;
+    // Verify the hash matches
+    if hash.to_string() != encrypted_ledger.hash {
+        return Err(LedgerError::InvalidPassword("Invalid password".to_string()));
     }
 
-    // Verify password matches existing hash
-    verify_password(path.parent().unwrap().to_str().unwrap(), password)?;
+    // Use the hash as the decryption key (first 32 bytes)
+    let binding = hash.hash.unwrap();
+    let key = &binding.as_bytes()[..32];
+    let cipher = Aes256Gcm::new_from_slice(key)?;
 
-    // Encrypt the data
-    let salt = hex::decode(&get_hash_info(path.parent().unwrap().to_str().unwrap())?.salt)?;
-    let binding = SaltString::encode_b64(&salt)?;
-    let key = Argon2::default().hash_password(password.as_bytes(), &binding)?;
-    let cipher = Aes256Gcm::new_from_slice(key.hash.unwrap().as_bytes())?;
-    let mut nonce = [0u8; 12];
-    OsRng.fill_bytes(&mut nonce);
-    let nonce = Nonce::from_slice(&nonce);
-    let encrypted = cipher.encrypt(&nonce, data.as_bytes())?;
-    let encrypted_data = format!("{}:{}", hex::encode(nonce), hex::encode(encrypted));
+    // Decode the nonce and ciphertext
+    let binding = hex::decode(&encrypted_ledger.nonce)?;
+    let nonce = Nonce::from_slice(&binding);
+    let ciphertext = hex::decode(&encrypted_ledger.ciphertext)?;
 
-    // Write to the specified path
-    fs::write(path, encrypted_data)?;
-    Ok(())
-}
-
-pub fn decrypt_data(path: &Path, password: &str) -> Result<String, LedgerError> {
-    // Verify password
-    verify_password(path.parent().unwrap().to_str().unwrap(), password)?;
-
-    // Read encrypted data
-    let encrypted_data = fs::read_to_string(path)?;
-
-    let parts: Vec<&str> = encrypted_data.split(':').collect();
-    if parts.len() != 2 {
-        return Err("Invalid encrypted data format".into());
-    }
-
-    let binding = hex::decode(parts[0])?;
-    let nonce = Nonce::from_slice(binding.as_slice());
-    let ciphertext = hex::decode(parts[1])?;
-
-    let hash_info = get_hash_info(path.parent().unwrap().to_str().unwrap())?;
-    let salt = hex::decode(&hash_info.salt)?;
-    let binding = SaltString::encode_b64(&salt)?;
-    let key = Argon2::default().hash_password(password.as_bytes(), &binding)?;
-    let cipher = Aes256Gcm::new_from_slice(key.hash.unwrap().as_bytes())?;
-
+    // Decrypt the ledger data
     let decrypted = cipher.decrypt(nonce, ciphertext.as_ref())?;
-    Ok(String::from_utf8(decrypted)?)
+
+    // Deserialize the ledger
+    let ledger: Vec<LedgerEntry> = serde_json::from_slice(&decrypted)?;
+
+    Ok(ledger)
 }
 
 pub fn generate_password_hash(password: &str) -> Result<(Vec<u8>, String), LedgerError> {
@@ -134,4 +123,20 @@ pub fn get_hash_info(root_path: &str) -> Result<HashInfo, LedgerError> {
     let hash_path = Path::new(root_path).join("hash.json");
     let hash_content = fs::read_to_string(hash_path)?;
     Ok(serde_json::from_str(&hash_content)?)
+}
+
+// pub fn check_entry_hash() {
+
+//     Ok(())
+// }
+
+// pub fn check_ledger_hash() {
+
+//     Ok(())
+// }
+
+// Function to hash entire ledger
+// needs to be set up still
+pub fn return_ledger_hash() -> String {
+    return "Hash Value of ledger".to_string();
 }

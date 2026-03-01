@@ -1,7 +1,10 @@
 use aes_gcm::aes::cipher::InvalidLength;
 use hex::FromHexError;
-use thiserror::Error;
+use std::path::StripPrefixError;
 use std::str::Utf8Error;
+use thiserror::Error;
+use walkdir::Error as WalkdirError;
+use zip::result::ZipError;
 
 #[derive(Error, Debug)]
 pub enum LedgerError {
@@ -22,7 +25,15 @@ pub enum LedgerError {
     #[error("Invalid AES-GCM length: {0}")]
     InvalidLength(InvalidLength),
     #[error("UTF-8 conversion error: {0}")]
-    Utf8(std::string::FromUtf8Error),
+    Utf8(#[from] std::string::FromUtf8Error),
+    #[error("Path prefix stripping error: {0}")]
+    PathPrefix(#[from] StripPrefixError),
+    #[error("ZIP archive error: {0}")]
+    Zip(#[from] ZipError),
+    #[error("Directory traversal error: {0}")]
+    Walkdir(#[from] WalkdirError),
+    #[error("Enrty not Found: {0}")]
+    EntryNotFound(String),
 }
 
 impl From<argon2::password_hash::Error> for LedgerError {
@@ -48,13 +59,6 @@ impl From<&str> for LedgerError {
         LedgerError::InvalidPassword(s.to_string())
     }
 }
-
-impl From<std::string::FromUtf8Error> for LedgerError {
-    fn from(err: std::string::FromUtf8Error) -> Self {
-        LedgerError::Utf8(err)
-    }
-}
-
 impl From<Utf8Error> for LedgerError {
     fn from(err: Utf8Error) -> Self {
         LedgerError::InvalidPassword(err.to_string())
