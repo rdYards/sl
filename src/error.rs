@@ -36,6 +36,8 @@ pub enum LedgerError {
     EntryNotFound(String),
     #[error("Generic error: {0}")]
     Generic(String),
+    #[error{"Invalid Salt: {0}"}]
+    InvalidSalt(String)
 }
 
 impl From<argon2::password_hash::Error> for LedgerError {

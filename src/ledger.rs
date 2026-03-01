@@ -1,19 +1,19 @@
 use crate::crypto::*;
 use crate::error::LedgerError;
 use crate::types::{HashInfo, LedgerEntry, MetaData};
+use rand::random;
 use std::{
     fs,
     fs::File,
     io::Read,
     path::{Path, PathBuf},
 };
-use rand::random;
 use zip::{ZipArchive, ZipWriter, write::SimpleFileOptions};
 
 use crate::crypto;
 use crate::logging::return_time;
 
-static VERSION: f32 = 0.5;
+static VERSION: f32 = 0.2;
 
 pub struct SecureLedger {
     pub meta: MetaData,
@@ -191,7 +191,17 @@ impl SecureLedger {
 
     pub fn upload_to_sl(&mut self, password: &str) -> Result<(), LedgerError> {
         // Generate hash for ledger for future checking
-        let salt = random::<[u8; 16]>();
+        let salt = if self.hash_info.salt.is_empty() {
+            random::<[u8; 16]>()
+        } else {
+            // Decode the existing salt from hex
+            hex::decode(&self.hash_info.salt)
+                .map_err(|e| LedgerError::InvalidSalt(e.to_string()))?
+                .try_into()
+                .map_err(|e: Vec<u8>| {
+                    LedgerError::InvalidSalt(format!("Salt length invalid: {}", e.len()))
+                })?
+        };
         let ledger_hash = generate_ledger_hash(self, &hex::encode(salt))?;
         self.meta.ledger_hash = ledger_hash;
         self.meta.last_modified = return_time();
