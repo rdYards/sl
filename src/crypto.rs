@@ -9,8 +9,8 @@ use serde::{Deserialize, Serialize};
 use std::fs;
 use std::path::Path;
 
-use crate::error::LedgerError;
 use crate::types::{HashInfo, LedgerEntry};
+use crate::{SecureLedger, error::LedgerError};
 
 // Structure to hold encrypted ledger data
 #[derive(Serialize, Deserialize)]
@@ -136,7 +136,19 @@ pub fn get_hash_info(root_path: &str) -> Result<HashInfo, LedgerError> {
 // }
 
 // Function to hash entire ledger
-// needs to be set up still
-pub fn return_ledger_hash() -> String {
-    return "Hash Value of ledger".to_string();
+pub fn generate_ledger_hash(ledger: &SecureLedger, salt: &str) -> Result<String, LedgerError> {
+    let ledger_json = serde_json::to_string(&ledger.ledger)?;
+    let encoded_salt = SaltString::encode_b64(salt.as_bytes())?;
+    let hash = Argon2::default().hash_password(ledger_json.as_bytes(), &encoded_salt)?;
+    Ok(hash.to_string())
+}
+
+pub fn check_loaded_with_ledger(
+    ledger: &Vec<LedgerEntry>,
+    salt: &str,
+) -> Result<String, LedgerError> {
+    let ledger_json = serde_json::to_string(&ledger)?;
+    let encoded_salt = SaltString::encode_b64(salt.as_bytes())?;
+    let hash = Argon2::default().hash_password(ledger_json.as_bytes(), &encoded_salt)?;
+    Ok(hash.to_string())
 }

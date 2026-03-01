@@ -7,6 +7,7 @@ use std::{
     io::Read,
     path::{Path, PathBuf},
 };
+use rand::random;
 use zip::{ZipArchive, ZipWriter, write::SimpleFileOptions};
 
 use crate::crypto;
@@ -25,15 +26,18 @@ impl SecureLedger {
     // Initalize based on file bath provided or not
     // If file path offered then load file instead
     // If no file offered then create new file
-    pub fn initialize(file_path: Option<&str>, password: Option<&str>) -> std::io::Result<Self> {
+    pub fn initialize(
+        file_path: Option<&str>,
+        password: Option<&str>,
+    ) -> Result<Self, LedgerError> {
         match file_path {
             Some(path) => {
                 // Check if file exists
                 if !Path::new(path).exists() {
-                    return Err(std::io::Error::new(
-                        std::io::ErrorKind::NotFound,
-                        format!("File not found: {}", path),
-                    ));
+                    return Err(LedgerError::EntryNotFound(format!(
+                        "File not found: {}",
+                        path
+                    )));
                 }
 
                 // Open the zip archive
@@ -74,12 +78,21 @@ impl SecureLedger {
                     Some(pw) => crypto::decrypt_ledger(&ledger_enc_content, pw)
                         .map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidData, e))?,
                     None => {
-                        return Err(std::io::Error::new(
-                            std::io::ErrorKind::InvalidData,
-                            "Password required to decrypt ledger",
+                        return Err(LedgerError::InvalidPassword(
+                            "Password required to decrypt ledger".to_string(),
                         ));
                     }
                 };
+
+                // Verify ledger hash
+                let current_hash = check_loaded_with_ledger(&ledger, &hash_info.salt)?;
+                println!("{} = {}", current_hash, meta.ledger_hash);
+                if current_hash != meta.ledger_hash {
+                    return Err(LedgerError::EntryNotFound(
+                        "Ledger hash verification failed - file may have been tampered with"
+                            .to_string(),
+                    ));
+                }
 
                 Ok(SecureLedger {
                     meta,
@@ -124,7 +137,6 @@ impl SecureLedger {
         self.meta.title = title.to_string();
         self.meta.last_modified = return_time();
         self.meta.description = description.to_string();
-        self.meta.ledger_hash = return_ledger_hash();
     }
 
     pub fn add_entry(&mut self, entry: LedgerEntry, password: &str) -> Result<(), LedgerError> {
@@ -177,7 +189,14 @@ impl SecureLedger {
             .collect()
     }
 
-    pub fn upload_to_sl(&self, password: &str) -> Result<(), LedgerError> {
+    pub fn upload_to_sl(&mut self, password: &str) -> Result<(), LedgerError> {
+        // Generate hash for ledger for future checking
+        let salt = random::<[u8; 16]>();
+        let ledger_hash = generate_ledger_hash(self, &hex::encode(salt))?;
+        self.meta.ledger_hash = ledger_hash;
+        self.meta.last_modified = return_time();
+        self.hash_info.salt = hex::encode(salt);
+
         let root_path = Path::new(&self.meta.root_path);
 
         // Handle case where path is a file (remove extension to get directory)

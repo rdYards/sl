@@ -32,8 +32,10 @@ pub enum LedgerError {
     Zip(#[from] ZipError),
     #[error("Directory traversal error: {0}")]
     Walkdir(#[from] WalkdirError),
-    #[error("Enrty not Found: {0}")]
+    #[error("Entry not Found: {0}")]
     EntryNotFound(String),
+    #[error("Generic error: {0}")]
+    Generic(String),
 }
 
 impl From<argon2::password_hash::Error> for LedgerError {
