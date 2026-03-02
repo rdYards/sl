@@ -98,11 +98,18 @@ mod tests {
         let result = ledger.remove_entry("non_existent", "password");
         assert!(result.is_err());
 
+        // After saving the ledger
+        println!("Error log count before save: {}", ledger.error_log.len());
+
         // Save the ledger to persist logs
         ledger.upload_to_sl("password")?;
 
         // Load it back and verify logs were created
         let loaded_ledger = SecureLedger::initialize(Some(test_path), Some("password"))?;
+        println!(
+            "Error log count after load: {}",
+            loaded_ledger.error_log.len()
+        );
         assert!(loaded_ledger.error_log.len() > initial_log_count);
 
         Ok(())

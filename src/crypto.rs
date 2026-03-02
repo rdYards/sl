@@ -26,12 +26,12 @@ pub fn encrypt_ledger(
     root_path: &str,
     ledger: &[LedgerEntry],
     password: &str,
+    hash_info: &HashInfo,
 ) -> Result<EncryptedLedger, LedgerError> {
-    // Generate a random 256-bit key from the password
-    let salt = random::<[u8; 16]>();
+    let salt = hex::decode(&hash_info.salt)?;
+    let encoded_salt = SaltString::encode_b64(&salt)?;
     let argon2 = Argon2::default();
-    let binding = SaltString::encode_b64(&salt)?;
-    let hash = argon2.hash_password(password.as_bytes(), &binding)?;
+    let hash = argon2.hash_password(password.as_bytes(), &encoded_salt)?;
 
     // Use the hash as the encryption key (first 32 bytes)
     let binding = hash.hash.unwrap();
@@ -51,7 +51,7 @@ pub fn encrypt_ledger(
     let encrypted_ledger = EncryptedLedger {
         nonce: hex::encode(nonce),
         ciphertext: hex::encode(ciphertext),
-        salt: hex::encode(salt),
+        salt: hash_info.salt.clone(),
         hash: hash.to_string(),
     };
 
@@ -125,30 +125,39 @@ pub fn get_hash_info(root_path: &str) -> Result<HashInfo, LedgerError> {
     Ok(serde_json::from_str(&hash_content)?)
 }
 
-// pub fn check_entry_hash() {
-
-//     Ok(())
-// }
-
-// pub fn check_ledger_hash() {
-
-//     Ok(())
-// }
+// Function to check entry hash when pushed to ledger
+pub fn generate_entry_hash(entry: &LedgerEntry, salt: &str) -> Result<String, LedgerError> {
+    let entry_json = serde_json::to_string(entry)?;
+    let salt_bytes = hex::decode(salt)?;
+    // Ensure salt is at least 16 bytes (128 bits) long
+    if salt_bytes.len() < 16 {
+        return Err(LedgerError::InvalidSalt(
+            "Salt must be at least 16 bytes long".to_string(),
+        ));
+    }
+    let encoded_salt = SaltString::encode_b64(&salt_bytes)?;
+    let hash = Argon2::default().hash_password(entry_json.as_bytes(), &encoded_salt)?;
+    Ok(hash.to_string())
+}
 
 // Function to hash entire ledger
 pub fn generate_ledger_hash(ledger: &SecureLedger, salt: &str) -> Result<String, LedgerError> {
     let ledger_json = serde_json::to_string(&ledger.ledger)?;
-    let encoded_salt = SaltString::encode_b64(salt.as_bytes())?;
+    let salt_bytes = hex::decode(salt)?;
+    let encoded_salt = SaltString::encode_b64(&salt_bytes)?;
     let hash = Argon2::default().hash_password(ledger_json.as_bytes(), &encoded_salt)?;
     Ok(hash.to_string())
 }
 
+// Simular to generate_ledger_hash() but used during ledger initialization.
+// Checks entire ledger
 pub fn check_loaded_with_ledger(
     ledger: &Vec<LedgerEntry>,
     salt: &str,
 ) -> Result<String, LedgerError> {
     let ledger_json = serde_json::to_string(&ledger)?;
-    let encoded_salt = SaltString::encode_b64(salt.as_bytes())?;
+    let salt_bytes = hex::decode(salt)?;
+    let encoded_salt = SaltString::encode_b64(&salt_bytes)?;
     let hash = Argon2::default().hash_password(ledger_json.as_bytes(), &encoded_salt)?;
     Ok(hash.to_string())
 }

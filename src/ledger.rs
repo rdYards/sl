@@ -52,6 +52,17 @@ impl SecureLedger {
                 let hash_info: HashInfo = serde_json::from_str(&hash_content)
                     .map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidData, e))?;
 
+                // If salt is empty, generate new one
+                let hash_info = if hash_info.salt.is_empty() {
+                    let salt = random::<[u8; 16]>();
+                    HashInfo {
+                        salt: hex::encode(salt),
+                        ..hash_info
+                    }
+                } else {
+                    hash_info
+                };
+
                 // Read meta.json
                 let mut meta_content = String::new();
                 archive
@@ -65,8 +76,14 @@ impl SecureLedger {
                 archive
                     .by_name("event.log")?
                     .read_to_string(&mut error_log_content)?;
-                let error_log: Vec<String> =
-                    error_log_content.lines().map(|s| s.to_string()).collect();
+                let error_log = match archive.by_name("event.log") {
+                    Ok(mut file) => {
+                        let mut error_log_content = String::new();
+                        file.read_to_string(&mut error_log_content)?;
+                        error_log_content.lines().map(|s| s.to_string()).collect()
+                    }
+                    Err(_) => vec![], // If file doesn't exist, use empty vector
+                };
 
                 // Read ledger.enc and decrypt
                 let mut ledger_enc_file = archive.by_name("ledger.enc")?;
@@ -114,9 +131,11 @@ impl SecureLedger {
                     ledger_hash: String::new(),
                 };
 
+                // Generate salt for new ledger
+                let salt = random::<[u8; 16]>();
                 let hash_info = HashInfo {
                     algorithm: "argon2".to_string(),
-                    salt: String::new(),
+                    salt: hex::encode(salt),
                     iterations: 3,
                     hash: String::new(),
                 };
@@ -140,8 +159,14 @@ impl SecureLedger {
     }
 
     pub fn add_entry(&mut self, entry: LedgerEntry, password: &str) -> Result<(), LedgerError> {
+        // Hash generate for each Entry marked in logs
+        let entry_hash = generate_entry_hash(&entry, &self.hash_info.salt)?;
+        self.log_event(&format!(
+            "Entry {} added with hash: {}",
+            entry.id, entry_hash
+        ))?;
+
         self.ledger.push(entry);
-        self.log_event("Entry added successfully")?;
 
         // Update the last modified time
         self.meta.last_modified = return_time();
@@ -190,18 +215,15 @@ impl SecureLedger {
     }
 
     pub fn upload_to_sl(&mut self, password: &str) -> Result<(), LedgerError> {
-        // Generate hash for ledger for future checking
-        let salt = if self.hash_info.salt.is_empty() {
-            random::<[u8; 16]>()
-        } else {
-            // Decode the existing salt from hex
-            hex::decode(&self.hash_info.salt)
-                .map_err(|e| LedgerError::InvalidSalt(e.to_string()))?
-                .try_into()
-                .map_err(|e: Vec<u8>| {
-                    LedgerError::InvalidSalt(format!("Salt length invalid: {}", e.len()))
-                })?
-        };
+        let salt = hex::decode(&self.hash_info.salt)
+            .map_err(|e| LedgerError::InvalidSalt(e.to_string()))?;
+        if salt.len() != 16 {
+            return Err(LedgerError::InvalidSalt(format!(
+                "Salt length invalid: {} (must be 16 bytes)",
+                salt.len()
+            )));
+        }
+        let salt: [u8; 16] = salt.try_into().unwrap();
         let ledger_hash = generate_ledger_hash(self, &hex::encode(salt))?;
         self.meta.ledger_hash = ledger_hash;
         self.meta.last_modified = return_time();
@@ -232,7 +254,12 @@ impl SecureLedger {
         fs::write(&meta_path, serde_json::to_string(&self.meta)?)?;
 
         // Encrypt and write ledger.enc to temp directory
-        encrypt_ledger(&temp_dir.path().to_string_lossy(), &self.ledger, password)?;
+        encrypt_ledger(
+            &temp_dir.path().to_string_lossy(),
+            &self.ledger,
+            password,
+            &self.hash_info,
+        )?;
 
         // Prepare error log content if it exists
         if !self.error_log.is_empty() {
