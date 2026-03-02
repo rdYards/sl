@@ -11,9 +11,9 @@ use std::{
 use zip::{ZipArchive, ZipWriter, write::SimpleFileOptions};
 
 use crate::crypto;
-use crate::logging::return_time;
+use crate::tools::return_time;
 
-static VERSION: f32 = 0.2;
+static VERSION: f32 = 0.3;
 
 pub struct SecureLedger {
     pub meta: MetaData,
@@ -23,9 +23,8 @@ pub struct SecureLedger {
 }
 
 impl SecureLedger {
-    // Initalize based on file bath provided or not
-    // If file path offered then load file instead
-    // If no file offered then create new file
+    // initialize if file_path is None then create new ledger
+    // if file_path is Some then load file from path
     pub fn initialize(
         file_path: Option<&str>,
         password: Option<&str>,
@@ -186,13 +185,13 @@ impl SecureLedger {
         // Find the entry with the given ID
         if let Some(pos) = self.ledger.iter().position(|e| e.id == id) {
             self.ledger.remove(pos);
-            self.log_event("Entry removed successfully")?;
+            self.log_event(&format!(
+                "Entry {} removed",
+                id
+            ))?;
 
             // Update the last modified time
             self.meta.last_modified = return_time();
-
-            // Update the ledger hash
-            // self.update_ledger_hash(password)?;
 
             // If write_on_change is enabled, save immediately
             if self.meta.write_on_change {
@@ -205,6 +204,7 @@ impl SecureLedger {
         }
     }
 
+    // Searched based on Contains
     pub fn search_entry(&self, query: &str) -> Vec<&LedgerEntry> {
         self.ledger
             .iter()

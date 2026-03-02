@@ -1,7 +1,7 @@
 pub mod crypto;
 pub mod error;
 pub mod ledger;
-pub mod logging;
+pub mod tools;
 pub mod types;
 
 pub use ledger::SecureLedger;
@@ -10,7 +10,7 @@ pub use ledger::SecureLedger;
 mod tests {
     use super::*;
     use crate::error::LedgerError;
-    use crate::logging::return_time;
+    use crate::tools::return_time;
     use crate::types::LedgerEntry;
     use std::{fs::File, io::Read, path::Path};
     use tempfile::tempdir;
