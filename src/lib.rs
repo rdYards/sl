@@ -10,8 +10,6 @@ pub use ledger::SecureLedger;
 mod tests {
     use super::*;
     use crate::error::LedgerError;
-    use crate::tools::return_time;
-    use crate::types::LedgerEntry;
     use std::{fs::File, io::Read, path::Path};
     use tempfile::tempdir;
     use zip::ZipArchive;
@@ -31,26 +29,25 @@ mod tests {
             test_path,
             "Encryption Test",
             "Testing encryption/decryption",
-        );
+        )?;
 
         // Add an entry
-        let entry1 = LedgerEntry {
-            id: "entry1".to_string(),
-            data: "Sensitive data 1".to_string(),
-            timestamp: return_time(),
-        };
-        ledger.add_entry(entry1, password)?;
+        ledger.create_entry(
+            password,
+            "default".to_string(),
+            "Sensitive data 1".to_string(),
+        )?;
 
         // Add another entry
-        let entry2 = LedgerEntry {
-            id: "entry2".to_string(),
-            data: "Sensitive data 2".to_string(),
-            timestamp: return_time(),
-        };
-        ledger.add_entry(entry2, password)?;
+        ledger.create_entry(
+            password,
+            "default".to_string(),
+            "Sensitive data 2".to_string(),
+        )?;
 
         // Remove an entry
-        ledger.remove_entry("entry1", password)?;
+        let entry = ledger.search_entry("Sensitive data 2");
+        ledger.remove_entry(&entry[0].id.to_string(), password)?;
 
         // Verify only one entry remains
         assert_eq!(ledger.ledger.len(), 1);
@@ -79,20 +76,13 @@ mod tests {
         ledger.meta.write_on_change = false;
 
         // Update metadata using update_meta
-        ledger.update_meta(test_path, "Logging Test", "Testing error logging");
+        ledger.update_meta(test_path, "Logging Test", "Testing error logging")?;
 
         // Get initial error log count
         let initial_log_count = ledger.error_log.len();
 
         // Perform operations that might generate logs
-        ledger.add_entry(
-            LedgerEntry {
-                id: "log_test1".to_string(),
-                data: "Test data".to_string(),
-                timestamp: return_time(),
-            },
-            "password",
-        )?;
+        ledger.create_entry("password", "default".to_string(), "Test Data".to_string())?;
 
         // Try to remove a non-existent entry (should generate error log)
         let result = ledger.remove_entry("non_existent", "password");
@@ -127,17 +117,14 @@ mod tests {
         let mut ledger = SecureLedger::initialize(None, None)?;
 
         // Update metadata using update_meta
-        ledger.update_meta(test_path, "Persistent Test", "This ledger should persist");
+        ledger.update_meta(test_path, "Persistent Test", "This ledger should persist")?;
 
         // Add some entries
         for i in 0..3 {
-            ledger.add_entry(
-                LedgerEntry {
-                    id: format!("persistent_{}", i),
-                    data: format!("Persistent data {}", i),
-                    timestamp: return_time(),
-                },
+            ledger.create_entry(
                 "persistent_password",
+                "default".to_string(),
+                format!("Sensitive data {}", i),
             )?;
         }
 
@@ -161,16 +148,13 @@ mod tests {
         let mut ledger = SecureLedger::initialize(None, None)?;
 
         // Update metadata using update_meta
-        ledger.update_meta(test_path, "Structure Test", "Testing archive structure");
+        ledger.update_meta(test_path, "Structure Test", "Testing archive structure")?;
 
         // Add an entry to generate some content
-        ledger.add_entry(
-            LedgerEntry {
-                id: "structure_test_entry".to_string(),
-                data: "Test data for structure".to_string(),
-                timestamp: return_time(),
-            },
+        ledger.create_entry(
             password,
+            "default".to_string(),
+            "Artitecture Structure test".to_string(),
         )?;
 
         // Save the ledger

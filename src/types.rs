@@ -15,6 +15,7 @@ pub struct MetaData {
 
 #[derive(Serialize, Deserialize)]
 pub struct LedgerEntry {
+    pub genre: String,
     pub id: String,
     pub data: String,
     pub timestamp: String,

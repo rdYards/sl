@@ -11,7 +11,7 @@ use std::{
 use zip::{ZipArchive, ZipWriter, write::SimpleFileOptions};
 
 use crate::crypto;
-use crate::tools::return_time;
+use crate::tools::{return_time, return_time_simple};
 
 static VERSION: f32 = 0.3;
 
@@ -150,14 +150,33 @@ impl SecureLedger {
     }
 
     // Must be run after initialize to fix file_path
-    pub fn update_meta(&mut self, file_path: &str, title: &str, description: &str) {
+    pub fn update_meta(&mut self, file_path: &str, title: &str, description: &str) -> Result<(), LedgerError> {
         self.meta.root_path = PathBuf::from(file_path);
         self.meta.title = title.to_string();
         self.meta.last_modified = return_time();
         self.meta.description = description.to_string();
+        self.log_event("Metadata updated")?;
+        Ok(())
+    }
+    
+    pub fn create_entry(&mut self, password: &str, genre: String, data: String) -> Result<(), LedgerError> {
+        // Id based on amoutn of Entries.
+        let id = format!("{}-{}", self.ledger.len() + 1, return_time_simple());
+        
+        // Create Entry
+        let entry = LedgerEntry {
+            genre: genre,
+            id: id,
+            data: data,
+            timestamp: return_time(),
+        };
+        
+        // Add entry
+        self.add_entry(entry, password)?;
+        Ok(())
     }
 
-    pub fn add_entry(&mut self, entry: LedgerEntry, password: &str) -> Result<(), LedgerError> {
+    fn add_entry(&mut self, entry: LedgerEntry, password: &str) -> Result<(), LedgerError> {
         // Hash generate for each Entry marked in logs
         let entry_hash = generate_entry_hash(&entry, &self.hash_info.salt)?;
         self.log_event(&format!(
@@ -200,6 +219,10 @@ impl SecureLedger {
 
             Ok(())
         } else {
+            self.log_event(&format!(
+                "Failed to remove entry {}",
+                id
+            ))?;
             Err(LedgerError::EntryNotFound(id.to_string()))
         }
     }

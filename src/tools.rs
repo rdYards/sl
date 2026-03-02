@@ -21,3 +21,21 @@ pub fn return_time() -> String {
         hours, minutes, seconds, nanos
     )
 }
+
+pub fn return_time_simple() -> String {
+    let start = SystemTime::now();
+    let since_the_epoch = start
+        .duration_since(UNIX_EPOCH)
+        .expect("Time went backwards");
+
+    let seconds = since_the_epoch.as_secs();
+
+    // Convert seconds to hours, minutes, seconds
+    let hours = (seconds % 86400) / 3600;
+    let minutes = (seconds % 3600) / 60;
+
+    format!(
+        "{:02}:{:02}",
+        hours, minutes
+    )
+}
