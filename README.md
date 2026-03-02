@@ -7,7 +7,6 @@ A secure, encrypted ledger system for storing and managing sensitive data with c
 - **End-to-End Encryption**: All data is encrypted using AES-256-GCM with keys derived from Argon2 password hashing
 - **Tamper Detection**: Cryptographic hashing ensures data integrity
 - **Error Logging**: Comprehensive event logging for audit trails
-- **Modular Design**: Separate components for crypto, ledger management, and error handling
 - **Persistence**: Data is stored in encrypted ZIP archives
 
 ## Installation
