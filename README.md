@@ -17,6 +17,40 @@ Add to your `Cargo.toml`:
 [dependencies]
 sl = { git = "https://github.com/rdYards/sl.git" }
 ```
+## File Structure
+``` rust
+pub struct SecureLedger {
+    pub meta: MetaData,
+    pub ledger: Vec<LedgerEntry>,
+    pub hash_info: HashInfo,
+    pub error_log: Vec<String>,
+}
+
+pub struct MetaData {
+    pub root_path: PathBuf,
+    pub title: String,
+    pub version: f32,
+    pub created_at: String,
+    pub last_modified: String,
+    pub description: String,
+    pub write_on_change: bool,
+    pub ledger_hash: String
+}
+
+pub struct LedgerEntry {
+    pub genre: String,
+    pub id: String,
+    pub data: String,
+    pub timestamp: String,
+}
+
+pub struct HashInfo {
+    pub algorithm: String,
+    pub salt: String,
+    pub iterations: u32,
+    pub hash: String,
+}
+```
 
 ## Usage
 

@@ -18,7 +18,7 @@ static VERSION: f32 = 0.3;
 pub struct SecureLedger {
     pub meta: MetaData,
     pub ledger: Vec<LedgerEntry>,
-    pub hash_info: HashInfo,
+    hash_info: HashInfo,
     pub error_log: Vec<String>,
 }
 
@@ -326,19 +326,19 @@ impl SecureLedger {
         Ok(())
     }
 
-    pub fn log_event(&mut self, event: &str) -> Result<(), LedgerError> {
+    fn log_event(&mut self, event: &str) -> Result<(), LedgerError> {
         let timestamp = return_time();
         let log_entry = format!("{} - {}", timestamp, event);
         self.error_log.push(log_entry);
         Ok(())
     }
 
-    pub fn log_error(&mut self, error: &str) -> Result<(), LedgerError> {
+    fn log_error(&mut self, error: &str) -> Result<(), LedgerError> {
         self.log_event(&format!("ERROR: {}", error))?;
         Ok(())
     }
 
-    pub fn log_warning(&mut self, error: &str) -> Result<(), LedgerError> {
+    fn log_warning(&mut self, error: &str) -> Result<(), LedgerError> {
         self.log_event(&format!("WARNING: {}", error))?;
         Ok(())
     }

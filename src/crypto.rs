@@ -28,6 +28,8 @@ pub fn encrypt_ledger(
     password: &str,
     hash_info: &HashInfo,
 ) -> Result<EncryptedLedger, LedgerError> {
+    verify_password(root_path, password)?;
+    
     let salt = hex::decode(&hash_info.salt)?;
     let encoded_salt = SaltString::encode_b64(&salt)?;
     let argon2 = Argon2::default();
@@ -99,7 +101,7 @@ pub fn decrypt_ledger(
     Ok(ledger)
 }
 
-pub fn generate_password_hash(password: &str) -> Result<(Vec<u8>, String), LedgerError> {
+fn generate_password_hash(password: &str) -> Result<(Vec<u8>, String), LedgerError> {
     let salt = random::<[u8; 16]>();
     let argon2 = Argon2::default();
     let binding = SaltString::encode_b64(&salt)?;
@@ -107,7 +109,7 @@ pub fn generate_password_hash(password: &str) -> Result<(Vec<u8>, String), Ledge
     Ok((salt.to_vec(), hash.to_string()))
 }
 
-pub fn verify_password(root_path: &str, password: &str) -> Result<(), LedgerError> {
+fn verify_password(root_path: &str, password: &str) -> Result<(), LedgerError> {
     let hash_info = get_hash_info(root_path)?;
     let salt = hex::decode(&hash_info.salt)?;
     let encoded_salt = SaltString::encode_b64(&salt)?;
@@ -119,7 +121,7 @@ pub fn verify_password(root_path: &str, password: &str) -> Result<(), LedgerErro
     Ok(())
 }
 
-pub fn get_hash_info(root_path: &str) -> Result<HashInfo, LedgerError> {
+fn get_hash_info(root_path: &str) -> Result<HashInfo, LedgerError> {
     let hash_path = Path::new(root_path).join("hash.json");
     let hash_content = fs::read_to_string(hash_path)?;
     Ok(serde_json::from_str(&hash_content)?)
