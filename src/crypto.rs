@@ -79,7 +79,7 @@ pub fn decrypt_ledger(
 
     // Verify the hash matches
     if hash.to_string() != encrypted_ledger.hash {
-        return Err(LedgerError::InvalidPassword("Invalid password".to_string()));
+        return Err(LedgerError::InvalidPassword("Hash does not match".to_string()));
     }
 
     // Use the hash as the decryption key (first 32 bytes)
@@ -116,7 +116,7 @@ fn verify_password(root_path: &str, password: &str) -> Result<(), LedgerError> {
     let hash = Argon2::default().hash_password(password.as_bytes(), &encoded_salt)?;
 
     if hash.to_string() != hash_info.hash {
-        return Err(LedgerError::InvalidPassword("Invalid password".to_string()));
+        return Err(LedgerError::InvalidPassword("Password failed to verify".to_string()));
     }
     Ok(())
 }

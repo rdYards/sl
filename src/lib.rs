@@ -22,7 +22,7 @@ mod tests {
         let password = "secure_password";
 
         // Create a new ledger
-        let mut ledger = SecureLedger::initialize(None, None)?;
+        let mut ledger = SecureLedger::initialize(None, Some(password))?;
 
         // Update metadata using update_meta
         ledger.update_meta(
@@ -46,12 +46,13 @@ mod tests {
         )?;
 
         // Remove an entry
-        let entry = ledger.search_entry("Sensitive data 2");
-        ledger.remove_entry(&entry[0].id.to_string(), password)?;
+        let entry1 = ledger.search_entry("Sensitive data 2");
+        ledger.remove_entry(&entry1[0].id.to_string(), password)?;
 
         // Verify only one entry remains
         assert_eq!(ledger.ledger.len(), 1);
-        assert_eq!(ledger.ledger[0].id, "entry2");
+        let entry2 = ledger.search_entry("Sensitive data 1");
+        assert_eq!(ledger.ledger[0].id, entry2[0].id.to_string());
 
         // Save the ledger
         ledger.upload_to_sl(password)?;
@@ -59,8 +60,7 @@ mod tests {
         // Load it back to verify encryption/decryption worked
         let loaded_ledger = SecureLedger::initialize(Some(test_path), Some(password))?;
         assert_eq!(loaded_ledger.ledger.len(), 1);
-        assert_eq!(loaded_ledger.ledger[0].id, "entry2");
-        assert_eq!(loaded_ledger.ledger[0].data, "Sensitive data 2");
+        assert_eq!(loaded_ledger.ledger[0].data, "Sensitive data 1");
 
         Ok(())
     }
@@ -70,9 +70,10 @@ mod tests {
         let temp_dir = tempdir()?;
         let binding = temp_dir.path().join("log_test.sl");
         let test_path = binding.to_str().unwrap();
+        let password = "secure_password";
 
         // Create a new ledger with write_on_change disabled to test logging
-        let mut ledger = SecureLedger::initialize(None, None)?;
+        let mut ledger = SecureLedger::initialize(None, Some(password))?;
         ledger.meta.write_on_change = false;
 
         // Update metadata using update_meta
@@ -82,20 +83,20 @@ mod tests {
         let initial_log_count = ledger.error_log.len();
 
         // Perform operations that might generate logs
-        ledger.create_entry("password", "default".to_string(), "Test Data".to_string())?;
+        ledger.create_entry(password, "default".to_string(), "Test Data".to_string())?;
 
         // Try to remove a non-existent entry (should generate error log)
-        let result = ledger.remove_entry("non_existent", "password");
+        let result = ledger.remove_entry("non_existent", password);
         assert!(result.is_err());
 
         // After saving the ledger
         println!("Error log count before save: {}", ledger.error_log.len());
 
         // Save the ledger to persist logs
-        ledger.upload_to_sl("password")?;
+        ledger.upload_to_sl(password)?;
 
         // Load it back and verify logs were created
-        let loaded_ledger = SecureLedger::initialize(Some(test_path), Some("password"))?;
+        let loaded_ledger = SecureLedger::initialize(Some(test_path), Some(password))?;
         println!(
             "Error log count after load: {}",
             loaded_ledger.error_log.len()
@@ -112,9 +113,10 @@ mod tests {
         let current_dir = std::env::current_dir()?;
         let binding = current_dir.join("persistent_test.sl");
         let test_path = binding.to_str().unwrap();
+        let password = "secure_password";
 
         // Create a ledger with persistent storage
-        let mut ledger = SecureLedger::initialize(None, None)?;
+        let mut ledger = SecureLedger::initialize(None, Some(password))?;
 
         // Update metadata using update_meta
         ledger.update_meta(test_path, "Persistent Test", "This ledger should persist")?;
@@ -122,14 +124,14 @@ mod tests {
         // Add some entries
         for i in 0..3 {
             ledger.create_entry(
-                "persistent_password",
+                password,
                 "default".to_string(),
                 format!("Sensitive data {}", i),
             )?;
         }
 
         // Save the ledger
-        ledger.upload_to_sl("persistent_password")?;
+        ledger.upload_to_sl(password)?;
 
         // Verify the file exists (for manual inspection)
         assert!(Path::new(test_path).exists());
@@ -145,7 +147,7 @@ mod tests {
         let password = "structure_test_pw";
 
         // Create a test ledger
-        let mut ledger = SecureLedger::initialize(None, None)?;
+        let mut ledger = SecureLedger::initialize(None, Some(password))?;
 
         // Update metadata using update_meta
         ledger.update_meta(test_path, "Structure Test", "Testing archive structure")?;
@@ -169,6 +171,7 @@ mod tests {
         assert!(archive.by_name("meta.json").is_ok());
         assert!(archive.by_name("ledger.enc").is_ok());
         assert!(archive.by_name("event.log").is_ok());
+        assert!(archive.by_name("mimetype").is_ok());
 
         // Verify the files have content
         let mut hash_content = String::new();

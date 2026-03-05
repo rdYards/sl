@@ -35,7 +35,7 @@ pub fn return_time_simple() -> String {
     let minutes = (seconds % 3600) / 60;
 
     format!(
-        "{:02}:{:02}",
-        hours, minutes
+        "{:02}:{:02}:{:02}",
+        hours, minutes, seconds
     )
 }

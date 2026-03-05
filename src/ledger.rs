@@ -1,6 +1,7 @@
-use crate::crypto::*;
 use crate::error::LedgerError;
+use crate::tools::{return_time, return_time_simple};
 use crate::types::{HashInfo, LedgerEntry, MetaData};
+use crate::{crypto, crypto::*};
 use rand::random;
 use std::{
     fs,
@@ -8,10 +9,8 @@ use std::{
     io::Read,
     path::{Path, PathBuf},
 };
+use argon2::{Argon2, PasswordHasher, password_hash::SaltString};
 use zip::{ZipArchive, ZipWriter, write::SimpleFileOptions};
-
-use crate::crypto;
-use crate::tools::{return_time, return_time_simple};
 
 static VERSION: f32 = 0.3;
 
@@ -139,18 +138,34 @@ impl SecureLedger {
                     hash: String::new(),
                 };
 
-                Ok(SecureLedger {
-                    meta,
-                    ledger: vec![],
-                    hash_info,
-                    error_log: vec![],
-                })
+                // Take Password and prep hash for ledger
+                if let Some(pw) = password {
+                    let salt = hex::decode(&hash_info.salt)?;
+                    let encoded_salt = SaltString::encode_b64(&salt)?;
+                    let argon2 = Argon2::default();
+                    let hash = argon2.hash_password(pw.as_bytes(), &encoded_salt)?;
+                    let mut new_hash_info = hash_info;
+                    new_hash_info.hash = hash.to_string();
+                    return Ok(SecureLedger {
+                        meta,
+                        ledger: vec![],
+                        hash_info: new_hash_info,
+                        error_log: vec![],
+                    });
+                } else {
+                    return Err(LedgerError::InvalidPassword("No password provided to create Ledger".to_string()));
+                }
             }
         }
     }
 
     // Must be run after initialize to fix file_path
-    pub fn update_meta(&mut self, file_path: &str, title: &str, description: &str) -> Result<(), LedgerError> {
+    pub fn update_meta(
+        &mut self,
+        file_path: &str,
+        title: &str,
+        description: &str,
+    ) -> Result<(), LedgerError> {
         self.meta.root_path = PathBuf::from(file_path);
         self.meta.title = title.to_string();
         self.meta.last_modified = return_time();
@@ -158,11 +173,16 @@ impl SecureLedger {
         self.log_event("Metadata updated")?;
         Ok(())
     }
-    
-    pub fn create_entry(&mut self, password: &str, genre: String, data: String) -> Result<(), LedgerError> {
+
+    pub fn create_entry(
+        &mut self,
+        password: &str,
+        genre: String,
+        data: String,
+    ) -> Result<(), LedgerError> {
         // Id based on amoutn of Entries.
         let id = format!("{}-{}", self.ledger.len() + 1, return_time_simple());
-        
+
         // Create Entry
         let entry = LedgerEntry {
             genre: genre,
@@ -170,7 +190,7 @@ impl SecureLedger {
             data: data,
             timestamp: return_time(),
         };
-        
+
         // Add entry
         self.add_entry(entry, password)?;
         Ok(())
@@ -204,10 +224,7 @@ impl SecureLedger {
         // Find the entry with the given ID
         if let Some(pos) = self.ledger.iter().position(|e| e.id == id) {
             self.ledger.remove(pos);
-            self.log_event(&format!(
-                "Entry {} removed",
-                id
-            ))?;
+            self.log_event(&format!("Entry {} removed", id))?;
 
             // Update the last modified time
             self.meta.last_modified = return_time();
@@ -219,10 +236,7 @@ impl SecureLedger {
 
             Ok(())
         } else {
-            self.log_event(&format!(
-                "Failed to remove entry {}",
-                id
-            ))?;
+            self.log_event(&format!("Failed to remove entry {}", id))?;
             Err(LedgerError::EntryNotFound(id.to_string()))
         }
     }
@@ -268,6 +282,10 @@ impl SecureLedger {
         fs::create_dir_all(dir_path)?;
 
         // Write all individual files to temporary directory
+        // Write mimetype file first (must be first in ZIP archive)
+        let mimetype_path = temp_dir.path().join("mimetype");
+        fs::write(&mimetype_path, "application/secure-ledger")?;
+
         // Write hash.json
         let hash_path = temp_dir.path().join("hash.json");
         fs::write(&hash_path, serde_json::to_string(&self.hash_info)?)?;
@@ -301,6 +319,11 @@ impl SecureLedger {
         };
         let file = File::create(&zip_path)?;
         let mut zip = ZipWriter::new(file);
+
+        // Add mimetype file first (important for some archive readers)
+        let mut mimetype_file = File::open(mimetype_path)?;
+        zip.start_file("mimetype", SimpleFileOptions::default())?;
+        std::io::copy(&mut mimetype_file, &mut zip)?;
 
         // Add files to archive from temp directory
         let mut add_file = |name: &str| -> Result<(), LedgerError> {
