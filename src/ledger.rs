@@ -14,6 +14,7 @@ use zip::{ZipArchive, ZipWriter, write::SimpleFileOptions};
 
 static VERSION: f32 = 0.3;
 
+#[derive(Debug)]
 pub struct SecureLedger {
     pub meta: MetaData,
     pub ledger: Vec<LedgerEntry>,
@@ -101,7 +102,6 @@ impl SecureLedger {
 
                 // Verify ledger hash
                 let current_hash = check_loaded_with_ledger(&ledger, &hash_info.salt)?;
-                println!("{} = {}", current_hash, meta.ledger_hash);
                 if current_hash != meta.ledger_hash {
                     return Err(LedgerError::EntryNotFound(
                         "Ledger hash verification failed - file may have been tampered with"

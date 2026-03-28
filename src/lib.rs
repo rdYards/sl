@@ -1,8 +1,8 @@
-pub mod crypto;
-pub mod error;
-pub mod ledger;
-pub mod tools;
-pub mod types;
+mod crypto;
+mod error;
+mod ledger;
+mod tools;
+mod types;
 
 pub use ledger::SecureLedger;
 
