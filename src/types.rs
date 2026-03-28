@@ -1,7 +1,7 @@
 use std::path::PathBuf;
 use serde::{Deserialize, Serialize};
 
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct MetaData {
     pub root_path: PathBuf,
     pub title: String,
@@ -13,7 +13,7 @@ pub struct MetaData {
     pub ledger_hash: String
 }
 
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct LedgerEntry {
     pub genre: String,
     pub id: String,
@@ -21,7 +21,7 @@ pub struct LedgerEntry {
     pub timestamp: String,
 }
 
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct HashInfo {
     pub algorithm: String,
     pub salt: String,

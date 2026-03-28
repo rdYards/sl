@@ -14,7 +14,7 @@ use zip::{ZipArchive, ZipWriter, write::SimpleFileOptions};
 
 static VERSION: f32 = 0.3;
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct SecureLedger {
     pub meta: MetaData,
     pub ledger: Vec<LedgerEntry>,
