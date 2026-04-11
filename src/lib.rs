@@ -5,6 +5,7 @@ mod tools;
 mod types;
 
 pub use ledger::SecureLedger;
+pub use types::LedgerEntry;
 
 #[cfg(test)]
 mod tests {
