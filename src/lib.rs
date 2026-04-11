@@ -2,7 +2,7 @@ mod crypto;
 mod error;
 mod ledger;
 mod tools;
-mod types;
+pub mod types;
 
 pub use ledger::SecureLedger;
 pub use types::LedgerEntry;
