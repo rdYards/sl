@@ -2,6 +2,7 @@ use crate::error::LedgerError;
 use crate::tools::{return_time, return_time_simple};
 use crate::types::{HashInfo, LedgerEntry, MetaData};
 use crate::{crypto, crypto::*};
+use argon2::{Argon2, PasswordHasher, password_hash::SaltString};
 use rand::random;
 use std::{
     fs,
@@ -9,7 +10,6 @@ use std::{
     io::Read,
     path::{Path, PathBuf},
 };
-use argon2::{Argon2, PasswordHasher, password_hash::SaltString};
 use zip::{ZipArchive, ZipWriter, write::SimpleFileOptions};
 
 static VERSION: f32 = 0.3;
@@ -153,13 +153,15 @@ impl SecureLedger {
                         error_log: vec![],
                     });
                 } else {
-                    return Err(LedgerError::InvalidPassword("No password provided to create Ledger".to_string()));
+                    return Err(LedgerError::InvalidPassword(
+                        "No password provided to create Ledger".to_string(),
+                    ));
                 }
             }
         }
     }
 
-    // Must be run after initialize to fix file_path
+    /// Updates the metadata for the ledger.
     pub fn update_meta(
         &mut self,
         file_path: &str,
@@ -174,6 +176,7 @@ impl SecureLedger {
         Ok(())
     }
 
+    /// Method to create a new entry in the ledger.
     pub fn create_entry(
         &mut self,
         password: &str,
@@ -196,6 +199,7 @@ impl SecureLedger {
         Ok(())
     }
 
+    // Internal method to append an entry to the ledger
     fn add_entry(&mut self, entry: LedgerEntry, password: &str) -> Result<(), LedgerError> {
         // Hash generate for each Entry marked in logs
         let entry_hash = generate_entry_hash(&entry, &self.hash_info.salt)?;
@@ -220,6 +224,8 @@ impl SecureLedger {
         Ok(())
     }
 
+    /// Removes an entry from the ledger by its ID.
+    /// If write_on_change is enabled, the changes are persisted to the .sl file.
     pub fn remove_entry(&mut self, id: &str, password: &str) -> Result<(), LedgerError> {
         // Find the entry with the given ID
         if let Some(pos) = self.ledger.iter().position(|e| e.id == id) {
@@ -236,12 +242,49 @@ impl SecureLedger {
 
             Ok(())
         } else {
-            self.log_event(&format!("Failed to remove entry {}", id))?;
+            self.log_error(&format!("Failed to remove entry {}", id))?;
             Err(LedgerError::EntryNotFound(id.to_string()))
         }
     }
 
-    // Searched based on Contains
+    /// Retrieves a reference to an entry by its unique ID.
+    pub fn get_entry(&self, id: &str) -> Result<&LedgerEntry, LedgerError> {
+        self.ledger
+            .iter()
+            .find(|e| e.id == id)
+            .ok_or_else(|| LedgerError::EntryNotFound(id.to_string()))
+    }
+
+    /// Updates the data of an existing entry.
+    /// If write_on_change is enabled, the changes are persisted to the .sl file.
+    pub fn modify_entry(
+        &mut self,
+        id: &str,
+        new_data: String,
+        password: &str,
+    ) -> Result<(), LedgerError> {
+        // Find the entry in the ledger
+        if let Some(entry) = self.ledger.iter_mut().find(|e| e.id == id) {
+            entry.data = new_data; // Update the data
+
+            self.log_event(&format!("Entry {} modified", id))?;
+
+            // Update the last modified timestamp in metadata
+            self.meta.last_modified = return_time();
+
+            if self.meta.write_on_change {
+                self.upload_to_sl(password)?;
+            }
+
+            Ok(())
+        } else {
+            self.log_error(&format!("Failed to modify entry {}", id))?;
+            Err(LedgerError::EntryNotFound(id.to_string()))
+        }
+    }
+
+    /// Searches for entries where the query string is contained within the ID,
+    /// the data, or the timestamp.
     pub fn search_entry(&self, query: &str) -> Vec<&LedgerEntry> {
         self.ledger
             .iter()
@@ -251,6 +294,7 @@ impl SecureLedger {
             .collect()
     }
 
+    /// Encrypts, packages, and saves the current state of the ledger to a `.sl` file.
     pub fn upload_to_sl(&mut self, password: &str) -> Result<(), LedgerError> {
         let salt = hex::decode(&self.hash_info.salt)
             .map_err(|e| LedgerError::InvalidSalt(e.to_string()))?;
@@ -349,6 +393,7 @@ impl SecureLedger {
         Ok(())
     }
 
+    // Internal helpers to append a timestamped message to the ledger's event log.
     fn log_event(&mut self, event: &str) -> Result<(), LedgerError> {
         let timestamp = return_time();
         let log_entry = format!("{} - {}", timestamp, event);
