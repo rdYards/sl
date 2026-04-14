@@ -34,21 +34,19 @@ mod tests {
 
         // Add an entry
         ledger.create_entry(
-            password,
             "default".to_string(),
             "Sensitive data 1".to_string(),
         )?;
 
         // Add another entry
         ledger.create_entry(
-            password,
             "default".to_string(),
             "Sensitive data 2".to_string(),
         )?;
 
         // Remove an entry
         let entry1 = ledger.search_entry("Sensitive data 2");
-        ledger.remove_entry(&entry1[0].id.to_string(), password)?;
+        ledger.remove_entry(&entry1[0].id.to_string())?;
 
         // Verify only one entry remains
         assert_eq!(ledger.ledger.len(), 1);
@@ -84,10 +82,10 @@ mod tests {
         let initial_log_count = ledger.error_log.len();
 
         // Perform operations that might generate logs
-        ledger.create_entry(password, "default".to_string(), "Test Data".to_string())?;
+        ledger.create_entry("default".to_string(), "Test Data".to_string())?;
 
         // Try to remove a non-existent entry (should generate error log)
-        let result = ledger.remove_entry("non_existent", password);
+        let result = ledger.remove_entry("non_existent");
         assert!(result.is_err());
 
         // After saving the ledger
@@ -125,7 +123,6 @@ mod tests {
         // Add some entries
         for i in 0..3 {
             ledger.create_entry(
-                password,
                 "default".to_string(),
                 format!("Sensitive data {}", i),
             )?;
@@ -155,7 +152,6 @@ mod tests {
 
         // Add an entry to generate some content
         ledger.create_entry(
-            password,
             "default".to_string(),
             "Artitecture Structure test".to_string(),
         )?;

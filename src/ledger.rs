@@ -179,7 +179,6 @@ impl SecureLedger {
     /// Method to create a new entry in the ledger.
     pub fn create_entry(
         &mut self,
-        password: &str,
         genre: String,
         data: String,
     ) -> Result<(), LedgerError> {
@@ -195,12 +194,12 @@ impl SecureLedger {
         };
 
         // Add entry
-        self.add_entry(entry, password)?;
+        self.add_entry(entry)?;
         Ok(())
     }
 
     // Internal method to append an entry to the ledger
-    fn add_entry(&mut self, entry: LedgerEntry, password: &str) -> Result<(), LedgerError> {
+    fn add_entry(&mut self, entry: LedgerEntry) -> Result<(), LedgerError> {
         // Hash generate for each Entry marked in logs
         let entry_hash = generate_entry_hash(&entry, &self.hash_info.salt)?;
         self.log_event(&format!(
@@ -213,20 +212,12 @@ impl SecureLedger {
         // Update the last modified time
         self.meta.last_modified = return_time();
 
-        // Update the ledger hash
-        // update_ledger_hash(password)?;
-
-        // If write_on_change is enabled, save immediately
-        if self.meta.write_on_change {
-            self.upload_to_sl(password)?;
-        }
-
         Ok(())
     }
 
     /// Removes an entry from the ledger by its ID.
     /// If write_on_change is enabled, the changes are persisted to the .sl file.
-    pub fn remove_entry(&mut self, id: &str, password: &str) -> Result<(), LedgerError> {
+    pub fn remove_entry(&mut self, id: &str) -> Result<(), LedgerError> {
         // Find the entry with the given ID
         if let Some(pos) = self.ledger.iter().position(|e| e.id == id) {
             self.ledger.remove(pos);
@@ -234,11 +225,6 @@ impl SecureLedger {
 
             // Update the last modified time
             self.meta.last_modified = return_time();
-
-            // If write_on_change is enabled, save immediately
-            if self.meta.write_on_change {
-                self.upload_to_sl(password)?;
-            }
 
             Ok(())
         } else {
@@ -261,7 +247,6 @@ impl SecureLedger {
         &mut self,
         id: &str,
         new_data: String,
-        password: &str,
     ) -> Result<(), LedgerError> {
         // Find the entry in the ledger
         if let Some(entry) = self.ledger.iter_mut().find(|e| e.id == id) {
@@ -271,10 +256,6 @@ impl SecureLedger {
 
             // Update the last modified timestamp in metadata
             self.meta.last_modified = return_time();
-
-            if self.meta.write_on_change {
-                self.upload_to_sl(password)?;
-            }
 
             Ok(())
         } else {
