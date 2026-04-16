@@ -177,11 +177,7 @@ impl SecureLedger {
     }
 
     /// Method to create a new entry in the ledger.
-    pub fn create_entry(
-        &mut self,
-        genre: String,
-        data: String,
-    ) -> Result<(), LedgerError> {
+    pub fn create_entry(&mut self, genre: String, data: String) -> Result<(), LedgerError> {
         // Id based on amoutn of Entries.
         let id = format!("{}-{}", self.ledger.len() + 1, return_time_simple());
 
@@ -243,11 +239,7 @@ impl SecureLedger {
 
     /// Updates the data of an existing entry.
     /// If write_on_change is enabled, the changes are persisted to the .sl file.
-    pub fn modify_entry(
-        &mut self,
-        id: &str,
-        new_data: String,
-    ) -> Result<(), LedgerError> {
+    pub fn modify_entry(&mut self, id: &str, new_data: String) -> Result<(), LedgerError> {
         // Find the entry in the ledger
         if let Some(entry) = self.ledger.iter_mut().find(|e| e.id == id) {
             entry.data = new_data; // Update the data
@@ -291,31 +283,27 @@ impl SecureLedger {
         self.meta.last_modified = return_time();
         self.hash_info.salt = hex::encode(salt);
 
+        // Only add .sl if the path does not already end with .sl
         let root_path = Path::new(&self.meta.root_path);
-
-        // Handle case where path is a file (remove extension to get directory)
-        let dir_path = if root_path.extension().is_some() {
-            root_path.parent().unwrap_or_else(|| Path::new("."))
+        let zip_path = if root_path.extension().and_then(|s| s.to_str()) == Some("sl") {
+            root_path.to_path_buf()
         } else {
-            root_path
+            root_path.with_extension("sl")
         };
 
-        // Create a temporary directory
-        let temp_dir = tempfile::tempdir()?;
-
-        // Create directory if needed
-        fs::create_dir_all(dir_path)?;
+        if let Some(parent) = zip_path.parent() {
+            fs::create_dir_all(parent)?;
+        }
 
         // Write all individual files to temporary directory
-        // Write mimetype file first (must be first in ZIP archive)
+        let temp_dir = tempfile::tempdir()?;
+
         let mimetype_path = temp_dir.path().join("mimetype");
         fs::write(&mimetype_path, "application/secure-ledger")?;
 
-        // Write hash.json
         let hash_path = temp_dir.path().join("hash.json");
         fs::write(&hash_path, serde_json::to_string(&self.hash_info)?)?;
 
-        // Write meta.json
         let meta_path = temp_dir.path().join("meta.json");
         fs::write(&meta_path, serde_json::to_string(&self.meta)?)?;
 
@@ -334,14 +322,6 @@ impl SecureLedger {
             fs::write(&log_path, &content)?;
         }
 
-        // Create a new zip archive
-        let zip_path = Path::new(&self.meta.root_path);
-        // Only add .sl if the path does not already end with .sl
-        let zip_path = if zip_path.extension().and_then(|s| s.to_str()) == Some("sl") {
-            zip_path.to_path_buf()
-        } else {
-            zip_path.with_extension("sl")
-        };
         let file = File::create(&zip_path)?;
         let mut zip = ZipWriter::new(file);
 
@@ -350,7 +330,6 @@ impl SecureLedger {
         zip.start_file("mimetype", SimpleFileOptions::default())?;
         std::io::copy(&mut mimetype_file, &mut zip)?;
 
-        // Add files to archive from temp directory
         let mut add_file = |name: &str| -> Result<(), LedgerError> {
             let mut file = File::open(temp_dir.path().join(name))?;
             zip.start_file(name, SimpleFileOptions::default())?;
@@ -366,9 +345,8 @@ impl SecureLedger {
             add_file("event.log")?;
         }
 
-        zip.finish()?;
-
         // Drop the temp_dir to delete all temporary files
+        zip.finish()?;
         drop(temp_dir);
 
         Ok(())
