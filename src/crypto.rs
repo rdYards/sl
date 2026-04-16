@@ -4,7 +4,6 @@ use aes_gcm::{
 };
 use argon2::{Argon2, PasswordHasher, password_hash::SaltString};
 use hex;
-use rand::random;
 use serde::{Deserialize, Serialize};
 use std::fs;
 use std::path::Path;
@@ -99,14 +98,6 @@ pub fn decrypt_ledger(
     let ledger: Vec<LedgerEntry> = serde_json::from_slice(&decrypted)?;
 
     Ok(ledger)
-}
-
-fn generate_password_hash(password: &str) -> Result<(Vec<u8>, String), LedgerError> {
-    let salt = random::<[u8; 16]>();
-    let argon2 = Argon2::default();
-    let binding = SaltString::encode_b64(&salt)?;
-    let hash = argon2.hash_password(password.as_bytes(), &binding)?;
-    Ok((salt.to_vec(), hash.to_string()))
 }
 
 fn verify_password(root_path: &str, password: &str) -> Result<(), LedgerError> {
