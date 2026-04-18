@@ -4,6 +4,7 @@ use crate::types::{HashInfo, LedgerEntry, MetaData};
 use crate::{crypto, crypto::*};
 use argon2::{Argon2, PasswordHasher, password_hash::SaltString};
 use rand::random;
+use serde::{Deserialize, Serialize};
 use std::{
     fs,
     fs::File,
@@ -14,7 +15,7 @@ use zip::{ZipArchive, ZipWriter, write::SimpleFileOptions};
 
 static VERSION: f32 = 0.3;
 
-#[derive(Debug, Clone)]
+#[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct SecureLedger {
     pub meta: MetaData,
     pub ledger: Vec<LedgerEntry>,
