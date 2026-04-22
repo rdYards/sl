@@ -353,20 +353,20 @@ impl SecureLedger {
         Ok(())
     }
 
-    // Internal helpers to append a timestamped message to the ledger's event log.
-    fn log_event(&mut self, event: &str) -> Result<(), LedgerError> {
+    // Helpers to append a timestamped message to the ledger's event log.
+    pub fn log_event(&mut self, event: &str) -> Result<(), LedgerError> {
         let timestamp = return_time();
         let log_entry = format!("{} - {}", timestamp, event);
         self.error_log.push(log_entry);
         Ok(())
     }
 
-    fn log_error(&mut self, error: &str) -> Result<(), LedgerError> {
+    pub fn log_error(&mut self, error: &str) -> Result<(), LedgerError> {
         self.log_event(&format!("ERROR: {}", error))?;
         Ok(())
     }
 
-    fn log_warning(&mut self, error: &str) -> Result<(), LedgerError> {
+    pub fn log_warning(&mut self, error: &str) -> Result<(), LedgerError> {
         self.log_event(&format!("WARNING: {}", error))?;
         Ok(())
     }
