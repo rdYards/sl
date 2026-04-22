@@ -5,8 +5,8 @@ edition = "2024"
 
 description = "A generic framework for the .sl file-type"
 license = "MIT"
-repository = ""
-homepage = ""
+repository = "https://github.com/rdYards/sl"
+homepage = "https://github.com/rdYards/sl"
 documentation = ""
 readme = "README.md"
 keywords = ["sl", "secure-ledger"]
