@@ -76,7 +76,7 @@ impl SecureLedger {
                 archive
                     .by_name("event.log")?
                     .read_to_string(&mut error_log_content)?;
-                let error_log = match archive.by_name("event.log") {
+                let mut error_log = match archive.by_name("event.log") {
                     Ok(mut file) => {
                         let mut error_log_content = String::new();
                         file.read_to_string(&mut error_log_content)?;
@@ -84,6 +84,10 @@ impl SecureLedger {
                     }
                     Err(_) => vec![], // If file doesn't exist, use empty vector
                 };
+
+                let timestamp = return_time();
+                let log_entry = format!("{} - Ledger Initialized", timestamp);
+                error_log.push(log_entry);
 
                 // Read ledger.enc and decrypt
                 let mut ledger_enc_file = archive.by_name("ledger.enc")?;
@@ -270,6 +274,8 @@ impl SecureLedger {
 
     /// Encrypts, packages, and saves the current state of the ledger to a `.sl` file.
     pub fn upload_to_sl(&mut self, password: &str) -> Result<(), LedgerError> {
+        self.log_event(&format!("Saving ledger to file: {:?}", self.meta.root_path))?;
+
         let salt = hex::decode(&self.hash_info.salt)
             .map_err(|e| LedgerError::InvalidSalt(e.to_string()))?;
         if salt.len() != 16 {
