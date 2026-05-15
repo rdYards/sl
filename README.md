@@ -98,4 +98,4 @@ cargo test
 
 ## License
 
-[MIT License](LICENSE) (add your license here)
+[MIT License](LICENSE)
