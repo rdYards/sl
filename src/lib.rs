@@ -112,10 +112,16 @@ mod tests {
         let current_dir = std::env::current_dir()?;
         let binding = current_dir.join("persistent_test.sl");
         let test_path = binding.to_str().unwrap();
-        let password = "secure_password";
+        let password = format!(
+            "test_pw_{}",
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        );
 
         // Create a ledger with persistent storage
-        let mut ledger = SecureLedger::initialize(None, Some(password))?;
+        let mut ledger = SecureLedger::initialize(None, Some(password.as_str()))?;
 
         // Update metadata using update_meta
         ledger.update_meta(test_path, "Persistent Test", "This ledger should persist")?;
@@ -129,7 +135,7 @@ mod tests {
         }
 
         // Save the ledger
-        ledger.upload_to_sl(password)?;
+        ledger.upload_to_sl(password.as_str())?;
 
         // Verify the file exists (for manual inspection)
         assert!(Path::new(test_path).exists());
@@ -142,10 +148,16 @@ mod tests {
         let temp_dir = tempdir()?;
         let binding = temp_dir.path().join("structure_test.sl");
         let test_path = binding.to_str().unwrap();
-        let password = "structure_test_pw";
+        let password = format!(
+            "test_pw_{}",
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        );
 
         // Create a test ledger
-        let mut ledger = SecureLedger::initialize(None, Some(password))?;
+        let mut ledger = SecureLedger::initialize(None, Some(password.as_str()))?;
 
         // Update metadata using update_meta
         ledger.update_meta(test_path, "Structure Test", "Testing archive structure")?;
@@ -157,7 +169,7 @@ mod tests {
         )?;
 
         // Save the ledger
-        ledger.upload_to_sl(password)?;
+        ledger.upload_to_sl(password.as_str())?;
 
         // Open the zip archive to verify structure
         let file = File::open(test_path)?;
