@@ -11,19 +11,25 @@ pub use types::LedgerEntry;
 mod tests {
     use super::*;
     use crate::error::LedgerError;
-    use std::{fs::File, io::Read, path::Path};
+    use std::{fs::File, io::Read, path::Path, time::{SystemTime}};
     use tempfile::tempdir;
     use zip::ZipArchive;
-
+    
     #[test]
     fn test_intialize_ed() -> Result<(), LedgerError> {
         let temp_dir = tempdir()?;
         let binding = temp_dir.path().join("enc_test.sl");
         let test_path = binding.to_str().unwrap();
-        let password = "secure_password";
+        let password = format!(
+            "test_pw_{}",
+            SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        );
 
         // Create a new ledger
-        let mut ledger = SecureLedger::initialize(None, Some(password))?;
+        let mut ledger = SecureLedger::initialize(None, Some(password.as_str()))?;
 
         // Update metadata using update_meta
         ledger.update_meta(
@@ -54,10 +60,10 @@ mod tests {
         assert_eq!(ledger.ledger[0].id, entry2[0].id.to_string());
 
         // Save the ledger
-        ledger.upload_to_sl(password)?;
+        ledger.upload_to_sl(password.as_str())?;
 
         // Load it back to verify encryption/decryption worked
-        let loaded_ledger = SecureLedger::initialize(Some(test_path), Some(password))?;
+        let loaded_ledger = SecureLedger::initialize(Some(test_path), Some(password.as_str()))?;
         assert_eq!(loaded_ledger.ledger.len(), 1);
         assert_eq!(loaded_ledger.ledger[0].data, "Sensitive data 1");
 
@@ -69,10 +75,16 @@ mod tests {
         let temp_dir = tempdir()?;
         let binding = temp_dir.path().join("log_test.sl");
         let test_path = binding.to_str().unwrap();
-        let password = "secure_password";
-
+        let password = format!(
+            "test_pw_{}",
+            SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        );
+        
         // Create a new ledger with write_on_change disabled to test logging
-        let mut ledger = SecureLedger::initialize(None, Some(password))?;
+        let mut ledger = SecureLedger::initialize(None, Some(password.as_str()))?;
         ledger.meta.write_on_change = false;
 
         // Update metadata using update_meta
@@ -92,10 +104,10 @@ mod tests {
         println!("Error log count before save: {}", ledger.error_log.len());
 
         // Save the ledger to persist logs
-        ledger.upload_to_sl(password)?;
+        ledger.upload_to_sl(password.as_str())?;
 
         // Load it back and verify logs were created
-        let loaded_ledger = SecureLedger::initialize(Some(test_path), Some(password))?;
+        let loaded_ledger = SecureLedger::initialize(Some(test_path), Some(password.as_str()))?;
         println!(
             "Error log count after load: {}",
             loaded_ledger.error_log.len()
@@ -114,7 +126,7 @@ mod tests {
         let test_path = binding.to_str().unwrap();
         let password = format!(
             "test_pw_{}",
-            std::time::SystemTime::now()
+            SystemTime::now()
                 .duration_since(std::time::UNIX_EPOCH)
                 .unwrap()
                 .as_nanos()

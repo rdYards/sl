@@ -3,7 +3,6 @@ use aes_gcm::{
     aead::{Aead, KeyInit, OsRng},
 };
 use argon2::{Argon2, PasswordHasher, password_hash::SaltString};
-use hex;
 use serde::{Deserialize, Serialize};
 use std::fs;
 use std::path::Path;

@@ -151,16 +151,16 @@ impl SecureLedger {
                     let hash = argon2.hash_password(pw.as_bytes(), &encoded_salt)?;
                     let mut new_hash_info = hash_info;
                     new_hash_info.hash = hash.to_string();
-                    return Ok(SecureLedger {
+                     Ok(SecureLedger {
                         meta,
                         ledger: vec![],
                         hash_info: new_hash_info,
                         error_log: vec![],
-                    });
+                    })
                 } else {
-                    return Err(LedgerError::InvalidPassword(
+                    Err(LedgerError::InvalidPassword(
                         "No password provided to create Ledger".to_string(),
-                    ));
+                    ))
                 }
             }
         }
@@ -188,9 +188,9 @@ impl SecureLedger {
 
         // Create Entry
         let entry = LedgerEntry {
-            genre: genre,
-            id: id,
-            data: data,
+            genre,
+            id,
+            data,
             timestamp: return_time(),
         };
 
