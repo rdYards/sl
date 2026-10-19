@@ -20,6 +20,6 @@ argon2 = "0.5.3"
 hex = "0.4.3"
 rand = "0.10.0"
 thiserror = "2.0.18"
-zip = { version = "8.1.0", default-features = false, features = ["deflate"] }
+zip = { version = "9.0.3", default-features = false, features = ["deflate"] }
 walkdir = "2.5.0"
 tempfile = "3.25.0"
